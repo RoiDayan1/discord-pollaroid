@@ -11,15 +11,10 @@ export const BAR_LENGTH = 30;
 export const STAR_EMOJI = '⭐';
 export const HALF_STAR_EMOJI = '⭒';
 
-/** Converts a star rating (e.g. 3.5) to a display string like ⭐⭐⭐✦ */
+/** Converts a star rating (e.g. 3.5) to a display string like ⭐⭐⭐⭒ */
 export function starsDisplay(rating: number): string {
   const rounded = Math.round(rating * 2) / 2; // round to nearest 0.5
   const full = Math.floor(rounded);
   const hasHalf = rounded % 1 !== 0;
   return STAR_EMOJI.repeat(full) + (hasHalf ? HALF_STAR_EMOJI : '');
 }
-
-export const MAX_POLL_OPTIONS = 20;
-export const MAX_RANK_OPTIONS = 20;
-export const MAX_STAR_OPTIONS = 4;
-export const MAX_RANK_OPTIONS_PER_MESSAGE = 5;

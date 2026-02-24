@@ -70,7 +70,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
     {
       type: ComponentType.Label,
       label: 'Options',
-      description: 'One option per line (2-20 options)',
+      description: 'One option per line (minimum 2)',
       component: {
         type: ComponentType.TextInput,
         custom_id: MODAL_POLL_OPTIONS,

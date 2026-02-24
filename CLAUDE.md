@@ -115,8 +115,8 @@ src/
 
 | Discord Limit              | Value | Impact                                    |
 |----------------------------|-------|-------------------------------------------|
-| ActionRows per message     | 5     | Max 20 poll options (4x5 buttons + close) |
-| Buttons per ActionRow      | 5     | Star rank: max 4 options in modal         |
+| ActionRows per message     | 5     | Vote/Rate uses single button row          |
+| Buttons per ActionRow      | 5     | —                                         |
 | customId length            | 100   | 8-char nanoid keeps IDs short             |
 | Modal top-level components | 5     | Poll creation modal uses 4                |
 | Interaction response time  | 3s    | SQLite is fast, but defer if needed       |

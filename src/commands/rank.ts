@@ -50,7 +50,7 @@ const RANK_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
     {
       type: ComponentType.Label as const,
       label: 'Options',
-      description: 'One option per line (2-20, star mode max 4)',
+      description: 'One option per line (minimum 2)',
       component: {
         type: ComponentType.TextInput as const,
         custom_id: MODAL_RANK_OPTIONS,
@@ -119,7 +119,7 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
 
   // Parse and validate options
   const options = parseOptions(optionsRaw);
-  const error = validateRankOptions(options, mode);
+  const error = validateRankOptions(options);
   if (error) {
     await interaction.reply({ content: error, flags: MessageFlags.Ephemeral });
     return;
