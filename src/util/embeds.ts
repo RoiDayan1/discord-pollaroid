@@ -59,9 +59,11 @@ export function buildPollEmbed(
   const anonLabel = poll.anonymous ? 'Anonymous' : 'Public';
   const statusLabel = poll.closed ? 'Closed' : 'Open';
   const voterTxt = `voter${totalVoters !== 1 ? 's' : ''}`;
-  embed.setFooter({
-    text: `${totalVoters} ${voterTxt} | ${modeLabel} | ${anonLabel} | ${statusLabel}`,
-  });
+  let footerText = `${totalVoters} ${voterTxt} | ${modeLabel} | ${anonLabel} | ${statusLabel}`;
+  if (!showResults && !poll.closed) {
+    footerText += '\nResults will be revealed when closed';
+  }
+  embed.setFooter({ text: footerText });
 
   return embed;
 }
@@ -146,9 +148,11 @@ export function buildRankEmbed(
   const modeLabel = rank.mode === 'star' ? 'Star Rating' : 'Ordering';
   const anonLabel = rank.anonymous ? 'Anonymous' : 'Public';
   const statusLabel = rank.closed ? 'Closed' : 'Open';
-  embed.setFooter({
-    text: `${totalVoters} voter${totalVoters !== 1 ? 's' : ''} | ${modeLabel} | ${anonLabel} | ${statusLabel}`,
-  });
+  let rankFooter = `${totalVoters} voter${totalVoters !== 1 ? 's' : ''} | ${modeLabel} | ${anonLabel} | ${statusLabel}`;
+  if (!showResults && !rank.closed) {
+    rankFooter += '\nResults will be revealed when closed';
+  }
+  embed.setFooter({ text: rankFooter });
 
   return embed;
 }
