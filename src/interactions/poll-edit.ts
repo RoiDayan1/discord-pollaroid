@@ -16,7 +16,9 @@ import {
   TextInputStyle,
   MessageFlags,
 } from 'discord.js';
-import { getPoll, getPollOptions, updatePoll } from '../db/polls.js';
+import { getPoll, getPollOptions, getPollVotes, updatePoll } from '../db/polls.js';
+import { buildPollComponents } from '../util/components.js';
+import { buildPollEmbed } from '../util/embeds.js';
 import {
   parsePollEditOpen,
   POLL_EDIT_MODAL_PREFIX,
@@ -27,6 +29,7 @@ import {
 } from '../util/ids.js';
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
 import { parseOptions, validatePollOptions } from '../util/validation.js';
+import { pollCreatorSessions } from './poll-vote.js';
 
 /** Handles the "Open Edit Modal" button click — shows a pre-filled edit modal. */
 export async function handlePollEditButton(interaction: ButtonInteraction) {
@@ -172,7 +175,24 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
     options,
   });
 
-  let content = 'Poll updated! do Vote and Submit again to see the changes.';
+  // Refresh the poll message via the creator session
+  const key = `${pollId}:${interaction.user.id}`;
+  const session = pollCreatorSessions.get(key);
+
+  if (session?.pollInteraction) {
+    const updatedPoll = getPoll(pollId)!;
+    const updatedOptions = getPollOptions(pollId);
+    const votes = getPollVotes(pollId);
+    const embed = buildPollEmbed(updatedPoll, updatedOptions, votes, !!updatedPoll.show_live);
+    const components = buildPollComponents(pollId);
+    try {
+      await session.pollInteraction.editReply({ embeds: [embed], components });
+    } catch {
+      // Token may have expired — embed will refresh on next interaction
+    }
+  }
+
+  let content = 'Poll updated!';
   if (votesCleared) {
     content += ' Some votes were cleared due to removed options or voting mode change.';
   }
