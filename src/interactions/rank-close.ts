@@ -1,3 +1,5 @@
+/** Handles the rank close button — creator-only, shows final results. */
+
 import { type ButtonInteraction, MessageFlags } from 'discord.js';
 import { parseRankClose } from '../util/ids.js';
 import { getRank, getRankOptions, getRankVotes, closeRank } from '../db/ranks.js';
@@ -29,6 +31,7 @@ export async function handleRankClose(interaction: ButtonInteraction) {
 
   closeRank(rankId);
 
+  // Show final results with no action buttons
   const options = getRankOptions(rankId);
   const votes = getRankVotes(rankId);
   const updatedRank = getRank(rankId)!;

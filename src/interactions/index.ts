@@ -1,8 +1,15 @@
+/**
+ * Interaction router — matches button/select menu customIds to handlers.
+ * CustomId format: <type>:<nanoid>:<action>[:<params>]
+ */
+
 import type { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
 import { handlePollVoteOpen } from './poll-vote.js';
 import { handlePollClose } from './poll-close.js';
+import { handlePollEditButton } from './poll-edit.js';
 import { handleRankStarVote, handleRankOrderStart, handleRankOrderStep } from './rank-vote.js';
 import { handleRankClose } from './rank-close.js';
+import { safeErrorReply } from '../util/errors.js';
 
 export async function routeInteraction(
   interaction: ButtonInteraction | StringSelectMenuInteraction,
@@ -16,6 +23,9 @@ export async function routeInteraction(
     }
     if (id.match(/^poll:\w+:close$/)) {
       return await handlePollClose(interaction as ButtonInteraction);
+    }
+    if (id.match(/^poll:\w+:edit-open$/)) {
+      return await handlePollEditButton(interaction as ButtonInteraction);
     }
 
     // Rank interactions
@@ -31,12 +41,8 @@ export async function routeInteraction(
     if (id.match(/^rank:\w+:close$/)) {
       return await handleRankClose(interaction as ButtonInteraction);
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(`Error handling interaction ${id}:`, err);
-    const reply =
-      interaction.replied || interaction.deferred
-        ? interaction.followUp({ content: 'Something went wrong.', flags: 64 })
-        : interaction.reply({ content: 'Something went wrong.', flags: 64 });
-    await reply;
+    await safeErrorReply(interaction);
   }
 }

@@ -1,27 +1,29 @@
+/**
+ * /poll command — opens a modal to create a new poll.
+ * The modal uses Discord's new component types (Label, CheckboxGroup)
+ * which aren't fully typed in discord.js yet.
+ */
+
 import {
+  ComponentType,
+  MessageFlags,
   SlashCommandBuilder,
+  TextInputStyle,
   type ChatInputCommandInteraction,
   type ModalSubmitInteraction,
-  MessageFlags,
-  ComponentType,
-  TextInputStyle,
 } from 'discord.js';
-import type {
-  APIModalSubmitRadioGroupComponent,
-  APIModalSubmitCheckboxGroupComponent,
-  APIModalSubmissionComponent,
-} from 'discord-api-types/v10';
-import { generateId } from '../util/ids.js';
 import {
   createPoll,
-  setPollMessageId,
   getPoll,
   getPollOptions,
   getPollVotes,
+  setPollMessageId,
 } from '../db/polls.js';
-import { buildPollEmbed } from '../util/embeds.js';
 import { buildPollComponents } from '../util/components.js';
-import { MAX_POLL_OPTIONS } from '../util/constants.js';
+import { buildPollEmbed } from '../util/embeds.js';
+import { generateId } from '../util/ids.js';
+import { getCheckboxValues, getRawModalComponents } from '../util/modal.js';
+import { parseOptions, validatePollOptions } from '../util/validation.js';
 
 export const POLL_MODAL_ID = 'poll-create-modal';
 
@@ -91,68 +93,37 @@ const POLL_MODAL_PAYLOAD = {
 
 export const data = new SlashCommandBuilder()
   .setName('poll')
-  .setDescription('Create a new poll');
+  .setDescription('Create and manage polls')
+  .addSubcommand((sub) => sub.setName('create').setDescription('Create a new poll'));
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  // @ts-expect-error -- Label/RadioGroup/CheckboxGroup not in discord.js modal types yet
+  // @ts-expect-error -- Label/CheckboxGroup not in discord.js modal types yet
   await interaction.showModal(POLL_MODAL_PAYLOAD);
-}
-
-export function findModalComponent(
-  components: APIModalSubmissionComponent[],
-  customId: string,
-): APIModalSubmitRadioGroupComponent | APIModalSubmitCheckboxGroupComponent | undefined {
-  for (const comp of components) {
-    if (comp.type === ComponentType.Label) {
-      const inner = comp.component;
-      if ('customId' in inner && inner.customId === customId) {
-        return inner as APIModalSubmitRadioGroupComponent | APIModalSubmitCheckboxGroupComponent;
-      }
-    }
-  }
-  return undefined;
 }
 
 export async function handlePollModalSubmit(interaction: ModalSubmitInteraction) {
   const title = interaction.fields.getTextInputValue('poll_title');
   const optionsRaw = interaction.fields.getTextInputValue('poll_options');
+  const rawComponents = getRawModalComponents(interaction);
 
-  // Parse RadioGroup and CheckboxGroup from raw components
-  const rawComponents = (interaction as unknown as { components: APIModalSubmissionComponent[] })
-    .components;
+  // Extract checkbox selections
+  const modeValues = getCheckboxValues(rawComponents, 'poll_mode');
+  const settingsValues = getCheckboxValues(rawComponents, 'poll_settings');
 
-  const modeComp = findModalComponent(rawComponents, 'poll_mode') as
-    | { values?: string[] }
-    | undefined;
-  const settingsComp = findModalComponent(rawComponents, 'poll_settings') as
-    | { values?: string[] }
-    | undefined;
+  const mode = (modeValues[0] ?? 'single') as 'single' | 'multi';
+  const anonymous = settingsValues.includes('anonymous');
+  // Default to show_live when settings is empty (first-time creation)
+  const showLive = settingsValues.length > 0 ? settingsValues.includes('show_live') : true;
 
-  const mode = ((modeComp?.values ?? [])[0] ?? 'single') as 'single' | 'multi';
-  const settings = settingsComp?.values ?? ['show_live'];
-  const anonymous = settings.includes('anonymous');
-  const showLive = settings.includes('show_live');
-
-  const options = optionsRaw
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (options.length < 2) {
-    await interaction.reply({
-      content: 'You need at least 2 options (one per line).',
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-  if (options.length > MAX_POLL_OPTIONS) {
-    await interaction.reply({
-      content: `Too many options (max ${MAX_POLL_OPTIONS}).`,
-      flags: MessageFlags.Ephemeral,
-    });
+  // Parse and validate options
+  const options = parseOptions(optionsRaw);
+  const error = validatePollOptions(options);
+  if (error) {
+    await interaction.reply({ content: error, flags: MessageFlags.Ephemeral });
     return;
   }
 
+  // Create poll in DB
   const pollId = generateId();
   createPoll(
     {
@@ -169,10 +140,10 @@ export async function handlePollModalSubmit(interaction: ModalSubmitInteraction)
     options,
   );
 
+  // Send poll message and store its ID for later updates
   const poll = getPoll(pollId)!;
   const pollOptions = getPollOptions(pollId);
   const votes = getPollVotes(pollId);
-
   const embed = buildPollEmbed(poll, pollOptions, votes, showLive);
   const components = buildPollComponents(pollId);
 

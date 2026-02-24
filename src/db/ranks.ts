@@ -101,6 +101,12 @@ export function voteRankOrder(
   tx();
 }
 
+export function getOpenRanksByCreator(creatorId: string, channelId: string): Rank[] {
+  return db
+    .prepare('SELECT * FROM ranks WHERE creator_id = ? AND channel_id = ? AND closed = 0')
+    .all(creatorId, channelId) as Rank[];
+}
+
 export function closeRank(rankId: string) {
   db.prepare('UPDATE ranks SET closed = 1 WHERE id = ?').run(rankId);
 }

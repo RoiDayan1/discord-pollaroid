@@ -20,12 +20,12 @@ export function buildPollEmbed(
     .setColor(poll.closed ? COLORS.CLOSED : COLORS.POLL);
 
   if (showResults) {
-    const voteCounts = new Map<number, { count: number; users: string[] }>();
+    const voteCounts = new Map<string, { count: number; users: string[] }>();
     for (const opt of options) {
-      voteCounts.set(opt.idx, { count: 0, users: [] });
+      voteCounts.set(opt.label, { count: 0, users: [] });
     }
     for (const v of votes) {
-      const entry = voteCounts.get(v.option_idx);
+      const entry = voteCounts.get(v.option_label);
       if (entry) {
         entry.count++;
         entry.users.push(v.user_id);
@@ -33,11 +33,11 @@ export function buildPollEmbed(
     }
 
     const lines = options.map((opt) => {
-      const entry = voteCounts.get(opt.idx)!;
+      const entry = voteCounts.get(opt.label)!;
       const pct = totalVoters > 0 ? entry.count / totalVoters : 0;
       // const pctStr = `${Math.round(pct * 100)}%`;
       const bar = progressBar(pct);
-      let line = `**${opt.label}**\n${bar} ${entry.count} vote${entry.count !== 1 ? 's' : ''}`;
+      let line = `**${opt.label}**\n${bar}   **${entry.count}** vote${entry.count !== 1 ? 's' : ''}`;
       if (!poll.anonymous && entry.users.length > 0) {
         const userMentions = entry.users
           .slice(0, 5)
@@ -58,8 +58,9 @@ export function buildPollEmbed(
   const modeLabel = poll.mode === 'single' ? 'Single Choice' : 'Multiple Choice';
   const anonLabel = poll.anonymous ? 'Anonymous' : 'Public';
   const statusLabel = poll.closed ? 'Closed' : 'Open';
+  const voterTxt = `voter${totalVoters !== 1 ? 's' : ''}`;
   embed.setFooter({
-    text: `${totalVoters} voter${totalVoters !== 1 ? 's' : ''} | ${modeLabel} | ${anonLabel} | ${statusLabel}`,
+    text: `${totalVoters} ${voterTxt} | ${modeLabel} | ${anonLabel} | ${statusLabel}`,
   });
 
   return embed;

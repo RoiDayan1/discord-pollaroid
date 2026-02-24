@@ -4,10 +4,8 @@ export const COLORS = {
   CLOSED: 0x99aab5, // Grey
 } as const;
 
-export const OPTION_LABELS = 'ABCDEFGHIJKLMNOPQRST'.split('');
-
-export const BAR_FILLED = '■';
-export const BAR_EMPTY = '▢';
+export const BAR_FILLED = '▉';
+export const BAR_EMPTY = '▂';
 export const BAR_LENGTH = 10;
 
 export const STAR_EMOJI = '\u2B50';

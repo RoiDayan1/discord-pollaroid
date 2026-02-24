@@ -1,3 +1,11 @@
+/**
+ * Rank voting handlers — supports two modes:
+ * - Star: Click a star button (1-5) per option, each click replaces your rating
+ * - Order: Multi-step select menu flow, pick options from best to worst
+ *
+ * The ordering flow uses an in-memory session map (lost on restart).
+ */
+
 import {
   type ButtonInteraction,
   type StringSelectMenuInteraction,
@@ -10,6 +18,11 @@ import { parseRankStar, parseRankOrderStart, parseRankOrderStep } from '../util/
 import { rankOrderStepId } from '../util/ids.js';
 import { getRank, getRankOptions, voteRankStar, voteRankOrder } from '../db/ranks.js';
 
+// ---------------------------------------------------------------------------
+// Star rating
+// ---------------------------------------------------------------------------
+
+/** Records a star rating for a single option. */
 export async function handleRankStarVote(interaction: ButtonInteraction) {
   const parsed = parseRankStar(interaction.customId);
   if (!parsed) return;
@@ -32,6 +45,21 @@ export async function handleRankStarVote(interaction: ButtonInteraction) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Ordering flow
+// ---------------------------------------------------------------------------
+
+/** In-memory ordering sessions — keyed by "rankId:userId". */
+const orderingSessions = new Map<
+  string,
+  { rankId: string; picks: { optionIdx: number; position: number }[] }
+>();
+
+function sessionKey(rankId: string, userId: string): string {
+  return `${rankId}:${userId}`;
+}
+
+/** Starts the ordering flow — shows the first step select menu. */
 export async function handleRankOrderStart(interaction: ButtonInteraction) {
   const parsed = parseRankOrderStart(interaction.customId);
   if (!parsed) return;
@@ -45,7 +73,6 @@ export async function handleRankOrderStart(interaction: ButtonInteraction) {
 
   const options = getRankOptions(rankId);
 
-  // Show first step: "Select your #1 (best) choice"
   const select = new StringSelectMenuBuilder()
     .setCustomId(rankOrderStepId(rankId, 1))
     .setPlaceholder('Select your #1 (best) choice')
@@ -60,16 +87,7 @@ export async function handleRankOrderStart(interaction: ButtonInteraction) {
   });
 }
 
-// In-memory state for ordering sessions
-const orderingSessions = new Map<
-  string,
-  { rankId: string; picks: { optionIdx: number; position: number }[] }
->();
-
-function sessionKey(rankId: string, userId: string): string {
-  return `${rankId}:${userId}`;
-}
-
+/** Handles each step of the ordering flow — records pick, shows next step or saves. */
 export async function handleRankOrderStep(interaction: StringSelectMenuInteraction) {
   const parsed = parseRankOrderStep(interaction.customId);
   if (!parsed) return;
@@ -84,24 +102,23 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
   const options = getRankOptions(rankId);
   const key = sessionKey(rankId, interaction.user.id);
 
-  // Get or create session
+  // Get or create session (reset if starting from position 1)
   let session = orderingSessions.get(key);
   if (!session || position === 1) {
     session = { rankId, picks: [] };
     orderingSessions.set(key, session);
   }
 
-  // Record pick
+  // Record this pick
   const selectedIdx = parseInt(interaction.values[0], 10);
   session.picks.push({ optionIdx: selectedIdx, position });
 
   const nextPosition = position + 1;
   const remaining = options.filter((opt) => !session!.picks.some((p) => p.optionIdx === opt.idx));
 
-  // If only one option remains, auto-assign it
+  // Auto-assign the last remaining option and save
   if (remaining.length === 1) {
     session.picks.push({ optionIdx: remaining[0].idx, position: nextPosition });
-    // Save to DB
     voteRankOrder(rankId, interaction.user.id, session.picks);
     orderingSessions.delete(key);
 

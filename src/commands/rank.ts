@@ -80,7 +80,7 @@ async function handleCreate(interaction: ChatInputCommandInteraction) {
   const votes = getRankVotes(rankId);
 
   if (mode === 'star') {
-    // Send multiple messages if > 4 options (5 ActionRows limit: 4 option rows + 1 close)
+    // Send multiple messages if > 5 options (5 ActionRows limit per message)
     const chunks: (typeof rankOptions)[] = [];
     for (let i = 0; i < rankOptions.length; i += MAX_RANK_OPTIONS_PER_MESSAGE) {
       chunks.push(rankOptions.slice(i, i + MAX_RANK_OPTIONS_PER_MESSAGE));
@@ -88,8 +88,8 @@ async function handleCreate(interaction: ChatInputCommandInteraction) {
 
     for (let c = 0; c < chunks.length; c++) {
       const isFirst = c === 0;
-      const isLast = c === chunks.length - 1;
       const embed = isFirst ? buildRankEmbed(rank, rankOptions, votes, false) : undefined;
+      const isLast = c === chunks.length - 1;
       const components = buildRankStarComponents(rankId, chunks[c], isLast);
 
       if (isFirst) {

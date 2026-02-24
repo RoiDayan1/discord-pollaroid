@@ -19,6 +19,16 @@ export function parsePollVoteOpen(customId: string): { pollId: string } | null {
   return { pollId: match[1] };
 }
 
+export function pollEditOpenId(pollId: string): string {
+  return `poll:${pollId}:edit-open`;
+}
+
+export function parsePollEditOpen(customId: string): { pollId: string } | null {
+  const match = customId.match(/^poll:(\w+):edit-open$/);
+  if (!match) return null;
+  return { pollId: match[1] };
+}
+
 export function parsePollClose(customId: string): { pollId: string } | null {
   const match = customId.match(/^poll:(\w+):close$/);
   if (!match) return null;

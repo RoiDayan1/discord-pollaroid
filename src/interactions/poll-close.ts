@@ -1,3 +1,5 @@
+/** Handles the poll close button — creator-only, shows final results. */
+
 import { type ButtonInteraction, MessageFlags } from 'discord.js';
 import { parsePollClose } from '../util/ids.js';
 import { getPoll, getPollOptions, getPollVotes, closePoll } from '../db/polls.js';
@@ -29,6 +31,7 @@ export async function handlePollClose(interaction: ButtonInteraction) {
 
   closePoll(pollId);
 
+  // Show final results with no action buttons
   const options = getPollOptions(pollId);
   const votes = getPollVotes(pollId);
   const updatedPoll = getPoll(pollId)!;

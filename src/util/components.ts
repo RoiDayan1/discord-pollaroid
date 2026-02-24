@@ -5,13 +5,7 @@ import {
   type MessageActionRowComponentBuilder,
 } from 'discord.js';
 import type { RankOption } from '../db/ranks.js';
-import {
-  pollVoteOpenId,
-  pollCloseId,
-  rankStarButtonId,
-  rankCloseId,
-  rankOrderStartId,
-} from './ids.js';
+import { pollVoteOpenId, rankStarButtonId, rankCloseId, rankOrderStartId } from './ids.js';
 
 export function buildPollComponents(
   pollId: string,
@@ -22,10 +16,6 @@ export function buildPollComponents(
         .setCustomId(pollVoteOpenId(pollId))
         .setLabel('Vote')
         .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(pollCloseId(pollId))
-        .setLabel('Close Poll')
-        .setStyle(ButtonStyle.Danger),
     ),
   ];
 }

@@ -24,11 +24,11 @@ export function initSchema(db: Database.Database) {
     );
 
     CREATE TABLE IF NOT EXISTS poll_votes (
-      poll_id    TEXT NOT NULL REFERENCES polls(id),
-      option_idx INTEGER NOT NULL,
-      user_id    TEXT NOT NULL,
-      voted_at   TEXT NOT NULL DEFAULT (datetime('now')),
-      PRIMARY KEY (poll_id, option_idx, user_id)
+      poll_id      TEXT NOT NULL REFERENCES polls(id),
+      option_label TEXT NOT NULL,
+      user_id      TEXT NOT NULL,
+      voted_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (poll_id, option_label, user_id)
     );
 
     CREATE TABLE IF NOT EXISTS ranks (
@@ -60,4 +60,27 @@ export function initSchema(db: Database.Database) {
       PRIMARY KEY (rank_id, option_idx, user_id)
     );
   `);
+
+  // Migration: poll_votes option_idx → option_label
+  const cols = db.pragma('table_info(poll_votes)') as { name: string }[];
+  if (cols.some((c) => c.name === 'option_idx')) {
+    db.exec(`
+      CREATE TABLE poll_votes_new (
+        poll_id      TEXT NOT NULL REFERENCES polls(id),
+        option_label TEXT NOT NULL,
+        user_id      TEXT NOT NULL,
+        voted_at     TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (poll_id, option_label, user_id)
+      );
+
+      INSERT INTO poll_votes_new (poll_id, option_label, user_id, voted_at)
+        SELECT pv.poll_id, po.label, pv.user_id, pv.voted_at
+        FROM poll_votes pv
+        JOIN poll_options po ON po.poll_id = pv.poll_id AND po.idx = pv.option_idx;
+
+      DROP TABLE poll_votes;
+
+      ALTER TABLE poll_votes_new RENAME TO poll_votes;
+    `);
+  }
 }
