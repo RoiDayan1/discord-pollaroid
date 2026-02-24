@@ -1,17 +1,15 @@
 /**
- * Poll voting flow — handles the vote modal and all submission branches.
+ * Poll voting flow — handles the vote modal and submission.
  *
- * Vote modal shows:
- * - CheckboxGroup with poll options (pre-selected with user's current votes)
- * - Creator-only CheckboxGroup with Close/Edit actions
+ * Creator flow:
+ * 1. Creator clicks "Vote" → ephemeral with Vote / Edit / Close buttons
+ * 2. "Vote" opens the vote modal, "Edit" opens edit modal, "Close" closes poll
  *
- * Submission branches:
- * 1. Creator selected "Edit"  → process vote, send ephemeral edit button
- * 2. Creator selected "Close" → close poll, show final results
- * 3. No options selected      → clear user's votes
- * 4. Options selected         → record vote
+ * Non-creator flow:
+ * 1. User clicks "Vote" → vote modal opens directly
  *
- * All branches refresh the poll message embed via deferUpdate + editReply.
+ * The creator session stores the original button interaction so the poll
+ * message can be refreshed after actions taken from the ephemeral.
  */
 
 import {
@@ -28,7 +26,6 @@ import {
 import type { Poll, PollOption } from '../db/polls.js';
 import {
   clearPollVotes,
-  closePoll,
   getPoll,
   getPollOptions,
   getPollVotes,
@@ -40,12 +37,32 @@ import { buildPollComponents } from '../util/components.js';
 import { buildPollEmbed } from '../util/embeds.js';
 import {
   parsePollVoteOpen,
+  parsePollVoteGo,
+  pollVoteGoId,
   pollEditOpenId,
+  pollCloseId,
   POLL_VOTE_MODAL_PREFIX,
   MODAL_POLL_VOTE_CHOICE,
-  MODAL_POLL_CLOSE,
 } from '../util/ids.js';
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
+
+// ---------------------------------------------------------------------------
+// Creator session map
+// ---------------------------------------------------------------------------
+
+/** In-memory creator sessions — keyed by "pollId:userId". */
+export const pollCreatorSessions = new Map<
+  string,
+  {
+    pollId: string;
+    /** The original button interaction on the poll message, used to refresh the embed. */
+    pollInteraction: ButtonInteraction;
+  }
+>();
+
+function sessionKey(pollId: string, userId: string): string {
+  return `${pollId}:${userId}`;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,23 +95,12 @@ async function refreshPollMessage(
   await interaction.editReply({ embeds: [embed], components });
 }
 
-// ---------------------------------------------------------------------------
-// Modal open
-// ---------------------------------------------------------------------------
-
-/** Opens the vote modal when the "Vote" button is clicked. */
-export async function handlePollVoteOpen(interaction: ButtonInteraction) {
-  const parsed = parsePollVoteOpen(interaction.customId);
-  if (!parsed) return;
-
-  const { pollId } = parsed;
-  const poll = getPoll(pollId);
-  if (!poll || poll.closed) {
-    await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  // Pre-select the user's existing votes
+/** Opens the vote modal (without creator options). */
+async function showVoteModal(
+  interaction: ButtonInteraction,
+  poll: Poll,
+  pollId: string,
+): Promise<void> {
   const options = getPollOptions(pollId);
   const userVotes = getUserPollVotes(pollId, interaction.user.id);
   const votedLabels = new Set(userVotes.map((v) => v.option_label));
@@ -122,25 +128,6 @@ export async function handlePollVoteOpen(interaction: ButtonInteraction) {
     },
   ];
 
-  // Creator-only actions (close / edit) — single select, nothing pre-selected
-  if (interaction.user.id === poll.creator_id) {
-    components.push({
-      type: ComponentType.Label,
-      label: 'Creator Options',
-      component: {
-        type: ComponentType.CheckboxGroup,
-        custom_id: MODAL_POLL_CLOSE,
-        min_values: 0,
-        max_values: 1,
-        required: false,
-        options: [
-          { label: 'Close this poll', value: 'close', default: false },
-          { label: 'Edit this poll', value: 'edit', default: false },
-        ],
-      },
-    });
-  }
-
   const modalPayload: Parameters<ButtonInteraction['showModal']>[0] = {
     title: 'Vote',
     custom_id: `${POLL_VOTE_MODAL_PREFIX}${pollId}`,
@@ -151,10 +138,78 @@ export async function handlePollVoteOpen(interaction: ButtonInteraction) {
 }
 
 // ---------------------------------------------------------------------------
+// Vote button — modal open or creator ephemeral
+// ---------------------------------------------------------------------------
+
+/** Handles the "Vote" button on the poll message. */
+export async function handlePollVoteOpen(interaction: ButtonInteraction) {
+  const parsed = parsePollVoteOpen(interaction.customId);
+  if (!parsed) return;
+
+  const { pollId } = parsed;
+  const poll = getPoll(pollId);
+  if (!poll || poll.closed) {
+    await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // Creator: show ephemeral with Vote / Edit / Close buttons
+  if (interaction.user.id === poll.creator_id) {
+    await interaction.deferUpdate();
+    const key = sessionKey(pollId, interaction.user.id);
+    pollCreatorSessions.set(key, { pollId, pollInteraction: interaction });
+
+    const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(pollVoteGoId(pollId))
+        .setLabel('Vote')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(pollEditOpenId(pollId))
+        .setLabel('Edit Poll')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(pollCloseId(pollId))
+        .setLabel('Close Poll')
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    await interaction.followUp({
+      content: 'What would you like to do?',
+      components: [row],
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Non-creator: open vote modal directly
+  await showVoteModal(interaction, poll, pollId);
+}
+
+// ---------------------------------------------------------------------------
+// Creator ephemeral — "Vote" button
+// ---------------------------------------------------------------------------
+
+/** Creator clicked "Vote" on the ephemeral — opens the vote modal. */
+export async function handlePollVoteGo(interaction: ButtonInteraction) {
+  const parsed = parsePollVoteGo(interaction.customId);
+  if (!parsed) return;
+
+  const { pollId } = parsed;
+  const poll = getPoll(pollId);
+  if (!poll || poll.closed) {
+    await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  await showVoteModal(interaction, poll, pollId);
+}
+
+// ---------------------------------------------------------------------------
 // Modal submit
 // ---------------------------------------------------------------------------
 
-/** Handles the vote modal submission — routes to the correct branch. */
+/** Handles the vote modal submission — records vote and refreshes the poll message. */
 export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteraction) {
   const pollId = interaction.customId.slice(POLL_VOTE_MODAL_PREFIX.length);
   const poll = getPoll(pollId);
@@ -166,50 +221,39 @@ export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteract
   const rawComponents = getRawModalComponents(interaction);
   const options = getPollOptions(pollId);
   const voteLabels = getCheckboxValues(rawComponents, MODAL_POLL_VOTE_CHOICE);
-  const creatorAction = getCheckboxValues(rawComponents, MODAL_POLL_CLOSE)[0];
 
-  // --- Branch: Creator chose "Edit" ---
-  if (creatorAction === 'edit' && interaction.user.id === poll.creator_id) {
-    recordVote(poll, pollId, interaction.user.id, voteLabels);
-    await refreshPollMessage(interaction, poll, options, pollId);
-
-    // Send ephemeral button to open the edit modal
-    const editRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(pollEditOpenId(pollId))
-        .setLabel('Open Edit Modal')
-        .setStyle(ButtonStyle.Secondary),
-    );
-    await interaction.followUp({
-      content: 'Click below to edit this poll.',
-      components: [editRow],
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // --- Branch: Creator chose "Close" ---
-  if (creatorAction === 'close' && interaction.user.id === poll.creator_id) {
-    closePoll(pollId);
-    const updatedPoll = getPoll(pollId)!;
-    const votes = getPollVotes(pollId);
-    const embed = buildPollEmbed(updatedPoll, options, votes, true);
-
-    await interaction.deferUpdate();
-    await interaction.editReply({ embeds: [embed], components: [] });
-    return;
-  }
-
-  // --- Branch: Regular vote ---
   recordVote(poll, pollId, interaction.user.id, voteLabels);
-  await refreshPollMessage(interaction, poll, options, pollId);
 
-  // Ephemeral confirmation when results aren't live
-  if (!poll.show_live) {
+  // Check if we have a creator session (modal opened from the ephemeral)
+  const key = sessionKey(pollId, interaction.user.id);
+  const session = pollCreatorSessions.get(key);
+
+  if (session?.pollInteraction) {
+    // Refresh the poll message via the stored interaction
+    const votes = getPollVotes(pollId);
+    const embed = buildPollEmbed(poll, options, votes, !!poll.show_live);
+    const components = buildPollComponents(pollId);
+    try {
+      await session.pollInteraction.editReply({ embeds: [embed], components });
+    } catch {
+      // Token may have expired — embed will refresh on next interaction
+    }
+
     const message =
       voteLabels.length === 0
         ? 'Your vote has been cleared.'
         : `Vote recorded for **${voteLabels.join(', ')}**!`;
-    await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
+  } else {
+    // Non-creator path — refresh via deferUpdate + editReply
+    await refreshPollMessage(interaction, poll, options, pollId);
+
+    if (!poll.show_live) {
+      const message =
+        voteLabels.length === 0
+          ? 'Your vote has been cleared.'
+          : `Vote recorded for **${voteLabels.join(', ')}**!`;
+      await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });
+    }
   }
 }

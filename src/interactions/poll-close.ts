@@ -4,6 +4,7 @@ import { type ButtonInteraction, MessageFlags } from 'discord.js';
 import { parsePollClose } from '../util/ids.js';
 import { getPoll, getPollOptions, getPollVotes, closePoll } from '../db/polls.js';
 import { buildPollEmbed } from '../util/embeds.js';
+import { pollCreatorSessions } from './poll-vote.js';
 
 export async function handlePollClose(interaction: ButtonInteraction) {
   const parsed = parsePollClose(interaction.customId);
@@ -37,5 +38,24 @@ export async function handlePollClose(interaction: ButtonInteraction) {
   const updatedPoll = getPoll(pollId)!;
   const embed = buildPollEmbed(updatedPoll, options, votes, true);
 
-  await interaction.update({ embeds: [embed], components: [] });
+  // Check for creator session — refresh poll message via stored interaction
+  const key = `${pollId}:${interaction.user.id}`;
+  const session = pollCreatorSessions.get(key);
+
+  if (session?.pollInteraction) {
+    // Update the ephemeral message to confirm closure
+    await interaction.update({ content: 'Poll closed!', components: [] });
+
+    // Refresh the poll message via the stored interaction
+    try {
+      await session.pollInteraction.editReply({ embeds: [embed], components: [] });
+    } catch {
+      // Token may have expired — embed will refresh on next interaction
+    }
+
+    pollCreatorSessions.delete(key);
+  } else {
+    // Fallback: update the message the button is on
+    await interaction.update({ embeds: [embed], components: [] });
+  }
 }

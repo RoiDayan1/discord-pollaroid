@@ -14,6 +14,7 @@ const ID_SEP = ':';
 
 // Poll actions
 const VOTE_OPEN = 'vote-open';
+const VOTE_GO = 'vote-go';
 const CLOSE = 'close';
 const EDIT_OPEN = 'edit-open';
 
@@ -38,7 +39,6 @@ export const MODAL_POLL_OPTIONS = 'poll_options';
 export const MODAL_POLL_MODE = 'poll_mode';
 export const MODAL_POLL_SETTINGS = 'poll_settings';
 export const MODAL_POLL_VOTE_CHOICE = 'poll_vote_choice';
-export const MODAL_POLL_CLOSE = 'poll_close';
 export const MODAL_RANK_TITLE = 'rank_title';
 export const MODAL_RANK_OPTIONS = 'rank_options';
 export const MODAL_RANK_MODE = 'rank_mode';
@@ -61,6 +61,7 @@ function simplePattern(type: string, action: string): RegExp {
 }
 
 export const POLL_VOTE_OPEN_RE = simplePattern(POLL, VOTE_OPEN);
+export const POLL_VOTE_GO_RE = simplePattern(POLL, VOTE_GO);
 export const POLL_CLOSE_RE = simplePattern(POLL, CLOSE);
 export const POLL_EDIT_OPEN_RE = simplePattern(POLL, EDIT_OPEN);
 export const RANK_RATE_RE = simplePattern(RANK, RATE);
@@ -83,6 +84,10 @@ export function pollVoteOpenId(pollId: string): string {
   return `${POLL}${ID_SEP}${pollId}${ID_SEP}${VOTE_OPEN}`;
 }
 
+export function pollVoteGoId(pollId: string): string {
+  return `${POLL}${ID_SEP}${pollId}${ID_SEP}${VOTE_GO}`;
+}
+
 export function pollCloseId(pollId: string): string {
   return `${POLL}${ID_SEP}${pollId}${ID_SEP}${CLOSE}`;
 }
@@ -97,6 +102,12 @@ export function pollEditOpenId(pollId: string): string {
 
 export function parsePollVoteOpen(customId: string): { pollId: string } | null {
   const match = customId.match(POLL_VOTE_OPEN_RE);
+  if (!match) return null;
+  return { pollId: match[1] };
+}
+
+export function parsePollVoteGo(customId: string): { pollId: string } | null {
+  const match = customId.match(POLL_VOTE_GO_RE);
   if (!match) return null;
   return { pollId: match[1] };
 }

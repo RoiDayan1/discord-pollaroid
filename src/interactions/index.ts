@@ -4,7 +4,7 @@
  */
 
 import type { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
-import { handlePollVoteOpen } from './poll-vote.js';
+import { handlePollVoteOpen, handlePollVoteGo } from './poll-vote.js';
 import { handlePollClose } from './poll-close.js';
 import { handlePollEditButton } from './poll-edit.js';
 import {
@@ -18,6 +18,7 @@ import { handleRankClose } from './rank-close.js';
 import { safeErrorReply } from '../util/errors.js';
 import {
   POLL_VOTE_OPEN_RE,
+  POLL_VOTE_GO_RE,
   POLL_CLOSE_RE,
   POLL_EDIT_OPEN_RE,
   RANK_RATE_RE,
@@ -37,6 +38,9 @@ export async function routeInteraction(
     // Poll interactions
     if (POLL_VOTE_OPEN_RE.test(id)) {
       return await handlePollVoteOpen(interaction as ButtonInteraction);
+    }
+    if (POLL_VOTE_GO_RE.test(id)) {
+      return await handlePollVoteGo(interaction as ButtonInteraction);
     }
     if (POLL_CLOSE_RE.test(id)) {
       return await handlePollClose(interaction as ButtonInteraction);
