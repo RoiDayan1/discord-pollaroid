@@ -15,6 +15,7 @@ import {
   type ButtonInteraction,
   type StringSelectMenuInteraction,
   type ModalSubmitInteraction,
+  type APIModalInteractionResponseCallbackData,
   StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -76,13 +77,12 @@ function buildStarVoteModal(
   rankId: string,
   options: RankOption[],
   currentRatings: Map<number, number>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): any {
+): APIModalInteractionResponseCallbackData {
   const components = options.map((opt, i) => ({
-    type: ComponentType.Label,
+    type: ComponentType.Label as const,
     label: `Rate: ${opt.label}`.slice(0, 45),
     component: {
-      type: ComponentType.StringSelect,
+      type: ComponentType.StringSelect as const,
       custom_id: modalRankStarId(i),
       placeholder: 'Choose a rating',
       required: false,

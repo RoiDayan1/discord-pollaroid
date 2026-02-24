@@ -8,6 +8,7 @@ import {
   MessageFlags,
   SlashCommandBuilder,
   TextInputStyle,
+  type APIModalInteractionResponseCallbackData,
   type ChatInputCommandInteraction,
   type ModalSubmitInteraction,
 } from 'discord.js';
@@ -31,15 +32,15 @@ import {
 import { getCheckboxValues, getRawModalComponents } from '../util/modal.js';
 import { parseOptions, validateRankOptions } from '../util/validation.js';
 
-const RANK_MODAL_PAYLOAD = {
+const RANK_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
   title: 'Create a Ranking',
   custom_id: RANK_MODAL_ID,
   components: [
     {
-      type: ComponentType.Label,
+      type: ComponentType.Label as const,
       label: 'Ranking Title',
       component: {
-        type: ComponentType.TextInput,
+        type: ComponentType.TextInput as const,
         custom_id: MODAL_RANK_TITLE,
         style: TextInputStyle.Short,
         placeholder: 'Best programming language?',
@@ -47,11 +48,11 @@ const RANK_MODAL_PAYLOAD = {
       },
     },
     {
-      type: ComponentType.Label,
+      type: ComponentType.Label as const,
       label: 'Options',
       description: 'One option per line (2-20, star mode max 4)',
       component: {
-        type: ComponentType.TextInput,
+        type: ComponentType.TextInput as const,
         custom_id: MODAL_RANK_OPTIONS,
         style: TextInputStyle.Paragraph,
         placeholder: 'TypeScript\nRust\nGo',
@@ -59,10 +60,10 @@ const RANK_MODAL_PAYLOAD = {
       },
     },
     {
-      type: ComponentType.Label,
+      type: ComponentType.Label as const,
       label: 'Ranking Mode',
       component: {
-        type: ComponentType.CheckboxGroup,
+        type: ComponentType.CheckboxGroup as const,
         custom_id: MODAL_RANK_MODE,
         min_values: 1,
         max_values: 1,
@@ -73,10 +74,10 @@ const RANK_MODAL_PAYLOAD = {
       },
     },
     {
-      type: ComponentType.Label,
+      type: ComponentType.Label as const,
       label: 'Settings',
       component: {
-        type: ComponentType.CheckboxGroup,
+        type: ComponentType.CheckboxGroup as const,
         custom_id: MODAL_RANK_SETTINGS,
         min_values: 0,
         max_values: 2,
@@ -101,7 +102,6 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((sub) => sub.setName('create').setDescription('Create a new ranking'));
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  // @ts-expect-error -- Label/CheckboxGroup not in discord.js modal types yet
   await interaction.showModal(RANK_MODAL_PAYLOAD);
 }
 
