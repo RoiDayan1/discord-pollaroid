@@ -40,6 +40,7 @@ export function initSchema(db: Database.Database) {
       title       TEXT NOT NULL,
       mode        TEXT NOT NULL CHECK(mode IN ('star', 'order')),
       anonymous   INTEGER NOT NULL DEFAULT 0,
+      show_live   INTEGER NOT NULL DEFAULT 0,
       closed      INTEGER NOT NULL DEFAULT 0,
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -60,6 +61,12 @@ export function initSchema(db: Database.Database) {
       PRIMARY KEY (rank_id, option_idx, user_id)
     );
   `);
+
+  // Migration: ranks — add show_live column
+  const rankCols = db.pragma('table_info(ranks)') as { name: string }[];
+  if (!rankCols.some((c) => c.name === 'show_live')) {
+    db.exec(`ALTER TABLE ranks ADD COLUMN show_live INTEGER NOT NULL DEFAULT 0`);
+  }
 
   // Migration: poll_votes option_idx → option_label
   const cols = db.pragma('table_info(poll_votes)') as { name: string }[];

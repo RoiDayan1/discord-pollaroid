@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import type { Poll, PollOption, PollVote } from '../db/polls.js';
 import type { Rank, RankOption, RankVote } from '../db/ranks.js';
-import { BAR_EMPTY, BAR_FILLED, BAR_LENGTH, COLORS, STAR_EMOJI } from './constants.js';
+import { BAR_EMPTY, BAR_FILLED, BAR_LENGTH, COLORS, starsDisplay } from './constants.js';
 
 function progressBar(ratio: number): string {
   const filled = Math.round(ratio * BAR_LENGTH);
@@ -93,9 +93,10 @@ export function buildRankEmbed(
 
     const lines = options.map((opt) => {
       const entry = stats.get(opt.idx)!;
-      const avg = entry.count > 0 ? (entry.sum / entry.count).toFixed(1) : '—';
-      const stars = entry.count > 0 ? STAR_EMOJI.repeat(Math.round(entry.sum / entry.count)) : '';
-      let line = `**${opt.label}**\n${stars} ${avg} avg (${entry.count} rating${entry.count !== 1 ? 's' : ''})`;
+      const avg = entry.count > 0 ? entry.sum / entry.count : 0;
+      const avgStr = entry.count > 0 ? avg.toFixed(1) : '—';
+      const stars = entry.count > 0 ? starsDisplay(avg) : '';
+      let line = `**${opt.label}**\n${stars} **${avgStr}** avg (${entry.count} rating${entry.count !== 1 ? 's' : ''})`;
       if (!rank.anonymous && entry.users.length > 0) {
         const userMentions = entry.users
           .slice(0, 5)
@@ -131,7 +132,7 @@ export function buildRankEmbed(
 
     const lines = sorted.map((item, i) => {
       const avgStr = item.count > 0 ? item.avg.toFixed(1) : '—';
-      return `**${i + 1}.** ${item.opt.label} — avg rank ${avgStr}`;
+      return `**${i + 1}. ${item.opt.label}**   — avg rank ${avgStr}`;
     });
 
     embed.setDescription(lines.join('\n'));

@@ -1,112 +1,156 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction, MessageFlags } from 'discord.js';
-import { generateId } from '../util/ids.js';
+/**
+ * /rank command — opens a modal to create a new ranking.
+ * Uses Label, TextInput, CheckboxGroup components (same pattern as /poll).
+ */
+
+import {
+  ComponentType,
+  MessageFlags,
+  SlashCommandBuilder,
+  TextInputStyle,
+  type ChatInputCommandInteraction,
+  type ModalSubmitInteraction,
+} from 'discord.js';
 import {
   createRank,
-  setRankMessageId,
   getRank,
   getRankOptions,
   getRankVotes,
+  setRankMessageId,
 } from '../db/ranks.js';
+import { buildRankRateComponents, buildRankOrderComponents } from '../util/components.js';
 import { buildRankEmbed } from '../util/embeds.js';
-import { buildRankStarComponents, buildRankOrderComponents } from '../util/components.js';
-import { MAX_RANK_OPTIONS_PER_MESSAGE } from '../util/constants.js';
+import {
+  generateId,
+  RANK_MODAL_ID,
+  MODAL_RANK_TITLE,
+  MODAL_RANK_OPTIONS,
+  MODAL_RANK_MODE,
+  MODAL_RANK_SETTINGS,
+} from '../util/ids.js';
+import { getCheckboxValues, getRawModalComponents } from '../util/modal.js';
+import { parseOptions, validateRankOptions } from '../util/validation.js';
+
+const RANK_MODAL_PAYLOAD = {
+  title: 'Create a Ranking',
+  custom_id: RANK_MODAL_ID,
+  components: [
+    {
+      type: ComponentType.Label,
+      label: 'Ranking Title',
+      component: {
+        type: ComponentType.TextInput,
+        custom_id: MODAL_RANK_TITLE,
+        style: TextInputStyle.Short,
+        placeholder: 'Best programming language?',
+        required: true,
+      },
+    },
+    {
+      type: ComponentType.Label,
+      label: 'Options',
+      description: 'One option per line (2-20, star mode max 4)',
+      component: {
+        type: ComponentType.TextInput,
+        custom_id: MODAL_RANK_OPTIONS,
+        style: TextInputStyle.Paragraph,
+        placeholder: 'TypeScript\nRust\nGo',
+        required: true,
+      },
+    },
+    {
+      type: ComponentType.Label,
+      label: 'Ranking Mode',
+      component: {
+        type: ComponentType.CheckboxGroup,
+        custom_id: MODAL_RANK_MODE,
+        min_values: 1,
+        max_values: 1,
+        options: [
+          { label: 'Star Rating', value: 'star', default: true },
+          { label: 'Ordering', value: 'order' },
+        ],
+      },
+    },
+    {
+      type: ComponentType.Label,
+      label: 'Settings',
+      component: {
+        type: ComponentType.CheckboxGroup,
+        custom_id: MODAL_RANK_SETTINGS,
+        min_values: 0,
+        max_values: 2,
+        required: false,
+        options: [
+          { label: 'Anonymous', value: 'anonymous', description: 'Hide voter names' },
+          {
+            label: 'Show Live Results',
+            value: 'show_live',
+            description: 'Show results before closing',
+            default: true,
+          },
+        ],
+      },
+    },
+  ],
+};
 
 export const data = new SlashCommandBuilder()
   .setName('rank')
   .setDescription('Create and manage rankings')
-  .addSubcommand((sub) =>
-    sub
-      .setName('create')
-      .setDescription('Create a new ranking')
-      .addStringOption((opt) =>
-        opt.setName('title').setDescription('Ranking title').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt.setName('options').setDescription('Comma-separated options').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('mode')
-          .setDescription('Ranking mode')
-          .setRequired(true)
-          .addChoices({ name: 'Star Rating', value: 'star' }, { name: 'Ordering', value: 'order' }),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('anonymous').setDescription('Hide voter names (default: false)'),
-      ),
-  );
+  .addSubcommand((sub) => sub.setName('create').setDescription('Create a new ranking'));
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  const sub = interaction.options.getSubcommand();
-  if (sub === 'create') return handleCreate(interaction);
+  // @ts-expect-error -- Label/CheckboxGroup not in discord.js modal types yet
+  await interaction.showModal(RANK_MODAL_PAYLOAD);
 }
 
-async function handleCreate(interaction: ChatInputCommandInteraction) {
-  const title = interaction.options.getString('title', true);
-  const optionsRaw = interaction.options.getString('options', true);
-  const mode = interaction.options.getString('mode', true) as 'star' | 'order';
-  const anonymous = interaction.options.getBoolean('anonymous') ?? false;
+export async function handleRankModalSubmit(interaction: ModalSubmitInteraction) {
+  const title = interaction.fields.getTextInputValue(MODAL_RANK_TITLE);
+  const optionsRaw = interaction.fields.getTextInputValue(MODAL_RANK_OPTIONS);
+  const rawComponents = getRawModalComponents(interaction);
 
-  const options = optionsRaw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const modeValues = getCheckboxValues(rawComponents, MODAL_RANK_MODE);
+  const settingsValues = getCheckboxValues(rawComponents, MODAL_RANK_SETTINGS);
 
-  if (options.length < 2) {
-    await interaction.reply({
-      content: 'You need at least 2 options.',
-      flags: MessageFlags.Ephemeral,
-    });
+  const mode = (modeValues[0] ?? 'star') as 'star' | 'order';
+  const anonymous = settingsValues.includes('anonymous');
+  const showLive = settingsValues.length > 0 ? settingsValues.includes('show_live') : true;
+
+  // Parse and validate options
+  const options = parseOptions(optionsRaw);
+  const error = validateRankOptions(options, mode);
+  if (error) {
+    await interaction.reply({ content: error, flags: MessageFlags.Ephemeral });
     return;
   }
 
+  // Create rank in DB
   const rankId = generateId();
   createRank(
     {
       id: rankId,
       guild_id: interaction.guildId!,
-      channel_id: interaction.channelId,
+      channel_id: interaction.channelId!,
       creator_id: interaction.user.id,
       title,
       mode,
       anonymous: anonymous ? 1 : 0,
+      show_live: showLive ? 1 : 0,
       closed: 0,
     },
     options,
   );
 
+  // Send rank message and store its ID
   const rank = getRank(rankId)!;
   const rankOptions = getRankOptions(rankId);
   const votes = getRankVotes(rankId);
+  const embed = buildRankEmbed(rank, rankOptions, votes, showLive);
+  const components =
+    mode === 'star' ? buildRankRateComponents(rankId) : buildRankOrderComponents(rankId);
 
-  if (mode === 'star') {
-    // Send multiple messages if > 5 options (5 ActionRows limit per message)
-    const chunks: (typeof rankOptions)[] = [];
-    for (let i = 0; i < rankOptions.length; i += MAX_RANK_OPTIONS_PER_MESSAGE) {
-      chunks.push(rankOptions.slice(i, i + MAX_RANK_OPTIONS_PER_MESSAGE));
-    }
-
-    for (let c = 0; c < chunks.length; c++) {
-      const isFirst = c === 0;
-      const embed = isFirst ? buildRankEmbed(rank, rankOptions, votes, false) : undefined;
-      const isLast = c === chunks.length - 1;
-      const components = buildRankStarComponents(rankId, chunks[c], isLast);
-
-      if (isFirst) {
-        await interaction.reply({ embeds: embed ? [embed] : [], components });
-        const message = await interaction.fetchReply();
-        setRankMessageId(rankId, message.id);
-      } else {
-        await interaction.followUp({ components });
-      }
-    }
-  } else {
-    // Ordering mode: single message with a "Submit Your Ranking" button
-    const embed = buildRankEmbed(rank, rankOptions, votes, false);
-    const components = buildRankOrderComponents(rankId);
-
-    await interaction.reply({ embeds: [embed], components });
-    const message = await interaction.fetchReply();
-    setRankMessageId(rankId, message.id);
-  }
+  await interaction.reply({ embeds: [embed], components });
+  const message = await interaction.fetchReply();
+  setRankMessageId(rankId, message.id);
 }

@@ -21,11 +21,16 @@ import {
 } from '../db/polls.js';
 import { buildPollComponents } from '../util/components.js';
 import { buildPollEmbed } from '../util/embeds.js';
-import { generateId } from '../util/ids.js';
+import {
+  generateId,
+  POLL_MODAL_ID,
+  MODAL_POLL_TITLE,
+  MODAL_POLL_OPTIONS,
+  MODAL_POLL_MODE,
+  MODAL_POLL_SETTINGS,
+} from '../util/ids.js';
 import { getCheckboxValues, getRawModalComponents } from '../util/modal.js';
 import { parseOptions, validatePollOptions } from '../util/validation.js';
-
-export const POLL_MODAL_ID = 'poll-create-modal';
 
 const POLL_MODAL_PAYLOAD = {
   title: 'Create a Poll',
@@ -36,7 +41,7 @@ const POLL_MODAL_PAYLOAD = {
       label: 'Poll Question',
       component: {
         type: ComponentType.TextInput,
-        custom_id: 'poll_title',
+        custom_id: MODAL_POLL_TITLE,
         style: TextInputStyle.Short,
         placeholder: 'What should we play Friday?',
         required: true,
@@ -48,7 +53,7 @@ const POLL_MODAL_PAYLOAD = {
       description: 'One option per line (2-20 options)',
       component: {
         type: ComponentType.TextInput,
-        custom_id: 'poll_options',
+        custom_id: MODAL_POLL_OPTIONS,
         style: TextInputStyle.Paragraph,
         placeholder: 'Valorant\nCS2\nOverwatch',
         required: true,
@@ -59,7 +64,7 @@ const POLL_MODAL_PAYLOAD = {
       label: 'Voting Mode',
       component: {
         type: ComponentType.CheckboxGroup,
-        custom_id: 'poll_mode',
+        custom_id: MODAL_POLL_MODE,
         min_values: 1,
         max_values: 1,
         options: [
@@ -73,7 +78,7 @@ const POLL_MODAL_PAYLOAD = {
       label: 'Settings',
       component: {
         type: ComponentType.CheckboxGroup,
-        custom_id: 'poll_settings',
+        custom_id: MODAL_POLL_SETTINGS,
         min_values: 0,
         max_values: 2,
         required: false,
@@ -102,13 +107,13 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 }
 
 export async function handlePollModalSubmit(interaction: ModalSubmitInteraction) {
-  const title = interaction.fields.getTextInputValue('poll_title');
-  const optionsRaw = interaction.fields.getTextInputValue('poll_options');
+  const title = interaction.fields.getTextInputValue(MODAL_POLL_TITLE);
+  const optionsRaw = interaction.fields.getTextInputValue(MODAL_POLL_OPTIONS);
   const rawComponents = getRawModalComponents(interaction);
 
   // Extract checkbox selections
-  const modeValues = getCheckboxValues(rawComponents, 'poll_mode');
-  const settingsValues = getCheckboxValues(rawComponents, 'poll_settings');
+  const modeValues = getCheckboxValues(rawComponents, MODAL_POLL_MODE);
+  const settingsValues = getCheckboxValues(rawComponents, MODAL_POLL_SETTINGS);
 
   const mode = (modeValues[0] ?? 'single') as 'single' | 'multi';
   const anonymous = settingsValues.includes('anonymous');

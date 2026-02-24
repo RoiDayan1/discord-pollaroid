@@ -17,11 +17,16 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { getPoll, getPollOptions, updatePoll } from '../db/polls.js';
-import { parsePollEditOpen } from '../util/ids.js';
+import {
+  parsePollEditOpen,
+  POLL_EDIT_MODAL_PREFIX,
+  MODAL_POLL_TITLE,
+  MODAL_POLL_OPTIONS,
+  MODAL_POLL_MODE,
+  MODAL_POLL_SETTINGS,
+} from '../util/ids.js';
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
 import { parseOptions, validatePollOptions } from '../util/validation.js';
-
-export const POLL_EDIT_MODAL_PREFIX = 'poll-edit:';
 
 /** Handles the "Open Edit Modal" button click — shows a pre-filled edit modal. */
 export async function handlePollEditButton(interaction: ButtonInteraction) {
@@ -53,7 +58,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
       label: 'Poll Question',
       component: {
         type: ComponentType.TextInput,
-        custom_id: 'poll_title',
+        custom_id: MODAL_POLL_TITLE,
         style: TextInputStyle.Short,
         value: poll.title,
         required: true,
@@ -65,7 +70,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
       description: 'One option per line (2-20 options)',
       component: {
         type: ComponentType.TextInput,
-        custom_id: 'poll_options',
+        custom_id: MODAL_POLL_OPTIONS,
         style: TextInputStyle.Paragraph,
         value: optionText,
         required: true,
@@ -76,7 +81,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
       label: 'Voting Mode',
       component: {
         type: ComponentType.CheckboxGroup,
-        custom_id: 'poll_mode',
+        custom_id: MODAL_POLL_MODE,
         min_values: 1,
         max_values: 1,
         options: [
@@ -90,7 +95,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
       label: 'Settings',
       component: {
         type: ComponentType.CheckboxGroup,
-        custom_id: 'poll_settings',
+        custom_id: MODAL_POLL_SETTINGS,
         min_values: 0,
         max_values: 2,
         required: false,
@@ -139,12 +144,12 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
   }
 
   // Extract form values
-  const title = interaction.fields.getTextInputValue('poll_title');
-  const optionsRaw = interaction.fields.getTextInputValue('poll_options');
+  const title = interaction.fields.getTextInputValue(MODAL_POLL_TITLE);
+  const optionsRaw = interaction.fields.getTextInputValue(MODAL_POLL_OPTIONS);
   const rawComponents = getRawModalComponents(interaction);
 
-  const modeValues = getCheckboxValues(rawComponents, 'poll_mode');
-  const settingsValues = getCheckboxValues(rawComponents, 'poll_settings');
+  const modeValues = getCheckboxValues(rawComponents, MODAL_POLL_MODE);
+  const settingsValues = getCheckboxValues(rawComponents, MODAL_POLL_SETTINGS);
 
   const mode = (modeValues[0] ?? 'single') as 'single' | 'multi';
   const anonymous = settingsValues.includes('anonymous');

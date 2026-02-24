@@ -55,3 +55,15 @@ export function getCheckboxValues(
   const comp = findModalComponent(components, customId) as { values?: string[] } | undefined;
   return comp?.values ?? [];
 }
+
+/**
+ * Extracts the selected value from a RadioGroup component.
+ * Returns null if the component is missing or nothing is selected.
+ */
+export function getRadioValue(
+  components: APIModalSubmissionComponent[],
+  customId: string,
+): string | null {
+  const comp = findModalComponent(components, customId) as { value?: string | null } | undefined;
+  return comp?.value ?? null;
+}

@@ -38,10 +38,14 @@ import {
 } from '../db/polls.js';
 import { buildPollComponents } from '../util/components.js';
 import { buildPollEmbed } from '../util/embeds.js';
-import { parsePollVoteOpen, pollEditOpenId } from '../util/ids.js';
+import {
+  parsePollVoteOpen,
+  pollEditOpenId,
+  POLL_VOTE_MODAL_PREFIX,
+  MODAL_POLL_VOTE_CHOICE,
+  MODAL_POLL_CLOSE,
+} from '../util/ids.js';
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
-
-export const POLL_VOTE_MODAL_PREFIX = 'poll-vote:';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,7 +113,7 @@ export async function handlePollVoteOpen(interaction: ButtonInteraction) {
       label: isSingle ? 'Choose an option' : 'Choose one or more options',
       component: {
         type: ComponentType.CheckboxGroup,
-        custom_id: 'poll_vote_choice',
+        custom_id: MODAL_POLL_VOTE_CHOICE,
         min_values: 0,
         required: false,
         max_values: isSingle ? 1 : options.length,
@@ -125,7 +129,7 @@ export async function handlePollVoteOpen(interaction: ButtonInteraction) {
       label: 'Creator Options',
       component: {
         type: ComponentType.CheckboxGroup,
-        custom_id: 'poll_close',
+        custom_id: MODAL_POLL_CLOSE,
         min_values: 0,
         max_values: 1,
         required: false,
@@ -161,8 +165,8 @@ export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteract
 
   const rawComponents = getRawModalComponents(interaction);
   const options = getPollOptions(pollId);
-  const voteLabels = getCheckboxValues(rawComponents, 'poll_vote_choice');
-  const creatorAction = getCheckboxValues(rawComponents, 'poll_close')[0];
+  const voteLabels = getCheckboxValues(rawComponents, MODAL_POLL_VOTE_CHOICE);
+  const creatorAction = getCheckboxValues(rawComponents, MODAL_POLL_CLOSE)[0];
 
   // --- Branch: Creator chose "Edit" ---
   if (creatorAction === 'edit' && interaction.user.id === poll.creator_id) {

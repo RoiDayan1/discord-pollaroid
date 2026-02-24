@@ -6,9 +6,18 @@ import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { config } from './config.js';
 import { commands } from './commands/index.js';
 import { routeInteraction } from './interactions/index.js';
-import { POLL_MODAL_ID, handlePollModalSubmit } from './commands/poll.js';
-import { POLL_VOTE_MODAL_PREFIX, handlePollVoteModalSubmit } from './interactions/poll-vote.js';
-import { POLL_EDIT_MODAL_PREFIX, handlePollEditModalSubmit } from './interactions/poll-edit.js';
+import { handlePollModalSubmit } from './commands/poll.js';
+import { handlePollVoteModalSubmit } from './interactions/poll-vote.js';
+import { handlePollEditModalSubmit } from './interactions/poll-edit.js';
+import { handleRankModalSubmit } from './commands/rank.js';
+import { handleRankStarVoteSubmit } from './interactions/rank-vote.js';
+import {
+  POLL_MODAL_ID,
+  POLL_VOTE_MODAL_PREFIX,
+  POLL_EDIT_MODAL_PREFIX,
+  RANK_MODAL_ID,
+  RANK_STAR_VOTE_MODAL_PREFIX,
+} from './util/ids.js';
 import { safeErrorReply } from './util/errors.js';
 
 // Importing connection initializes the DB and runs schema
@@ -43,6 +52,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await handlePollVoteModalSubmit(interaction);
       } else if (interaction.customId.startsWith(POLL_EDIT_MODAL_PREFIX)) {
         await handlePollEditModalSubmit(interaction);
+      } else if (interaction.customId === RANK_MODAL_ID) {
+        await handleRankModalSubmit(interaction);
+      } else if (interaction.customId.startsWith(RANK_STAR_VOTE_MODAL_PREFIX)) {
+        await handleRankStarVoteSubmit(interaction);
       }
     } catch (err) {
       console.error(`Error handling modal ${interaction.customId}:`, err);

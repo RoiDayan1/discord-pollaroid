@@ -9,6 +9,7 @@ export interface Rank {
   title: string;
   mode: 'star' | 'order';
   anonymous: number;
+  show_live: number;
   closed: number;
   created_at: string;
 }
@@ -30,8 +31,8 @@ export interface RankVote {
 
 export function createRank(rank: Omit<Rank, 'message_id' | 'created_at'>, options: string[]) {
   const insertRank = db.prepare(`
-    INSERT INTO ranks (id, guild_id, channel_id, creator_id, title, mode, anonymous, closed)
-    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @closed)
+    INSERT INTO ranks (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, closed)
+    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @closed)
   `);
   const insertOption = db.prepare(`
     INSERT INTO rank_options (rank_id, idx, label) VALUES (?, ?, ?)
