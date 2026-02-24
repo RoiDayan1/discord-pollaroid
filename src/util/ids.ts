@@ -20,6 +20,7 @@ const EDIT_OPEN = 'edit-open';
 
 // Rank actions
 const RATE = 'rate';
+const RATE_GO = 'rate-go';
 const STAR = 'star';
 const ORDER_START = 'order-start';
 const ORDER_STEP = 'order-step';
@@ -32,6 +33,7 @@ export const POLL_VOTE_MODAL_PREFIX = 'poll-vote:';
 export const POLL_EDIT_MODAL_PREFIX = 'poll-edit:';
 export const RANK_MODAL_ID = 'rank-create-modal';
 export const RANK_STAR_VOTE_MODAL_PREFIX = 'rank-star-vote:';
+export const RANK_EDIT_MODAL_PREFIX = 'rank-edit:';
 
 // Modal component custom_ids (inside modals, not message components)
 export const MODAL_POLL_TITLE = 'poll_title';
@@ -43,7 +45,6 @@ export const MODAL_RANK_TITLE = 'rank_title';
 export const MODAL_RANK_OPTIONS = 'rank_options';
 export const MODAL_RANK_MODE = 'rank_mode';
 export const MODAL_RANK_SETTINGS = 'rank_settings';
-export const MODAL_RANK_CLOSE = 'rank_close';
 
 export function modalRankStarId(index: number): string {
   return `rank_star_${index}`;
@@ -65,6 +66,8 @@ export const POLL_VOTE_GO_RE = simplePattern(POLL, VOTE_GO);
 export const POLL_CLOSE_RE = simplePattern(POLL, CLOSE);
 export const POLL_EDIT_OPEN_RE = simplePattern(POLL, EDIT_OPEN);
 export const RANK_RATE_RE = simplePattern(RANK, RATE);
+export const RANK_RATE_GO_RE = simplePattern(RANK, RATE_GO);
+export const RANK_EDIT_OPEN_RE = simplePattern(RANK, EDIT_OPEN);
 export const RANK_CLOSE_RE = simplePattern(RANK, CLOSE);
 export const RANK_ORDER_START_RE = simplePattern(RANK, ORDER_START);
 export const RANK_ORDER_GO_RE = simplePattern(RANK, ORDER_GO);
@@ -136,6 +139,14 @@ export function rankRateId(rankId: string): string {
   return `${RANK}${ID_SEP}${rankId}${ID_SEP}${RATE}`;
 }
 
+export function rankRateGoId(rankId: string): string {
+  return `${RANK}${ID_SEP}${rankId}${ID_SEP}${RATE_GO}`;
+}
+
+export function rankEditOpenId(rankId: string): string {
+  return `${RANK}${ID_SEP}${rankId}${ID_SEP}${EDIT_OPEN}`;
+}
+
 export function rankCloseId(rankId: string): string {
   return `${RANK}${ID_SEP}${rankId}${ID_SEP}${CLOSE}`;
 }
@@ -172,6 +183,18 @@ export function parseRankStar(
   const match = customId.match(RANK_STAR_RE);
   if (!match) return null;
   return { rankId: match[1], optionIdx: parseInt(match[2], 10), stars: parseInt(match[3], 10) };
+}
+
+export function parseRankRateGo(customId: string): { rankId: string } | null {
+  const match = customId.match(RANK_RATE_GO_RE);
+  if (!match) return null;
+  return { rankId: match[1] };
+}
+
+export function parseRankEditOpen(customId: string): { rankId: string } | null {
+  const match = customId.match(RANK_EDIT_OPEN_RE);
+  if (!match) return null;
+  return { rankId: match[1] };
 }
 
 export function parseRankClose(customId: string): { rankId: string } | null {

@@ -9,12 +9,14 @@ import { handlePollClose } from './poll-close.js';
 import { handlePollEditButton } from './poll-edit.js';
 import {
   handleRankStarVoteOpen,
+  handleRankRateGo,
   handleRankOrderStart,
   handleRankOrderStep,
   handleRankOrderGo,
   handleRankOrderClose,
 } from './rank-vote.js';
 import { handleRankClose } from './rank-close.js';
+import { handleRankEditButton } from './rank-edit.js';
 import { safeErrorReply } from '../util/errors.js';
 import {
   POLL_VOTE_OPEN_RE,
@@ -22,6 +24,8 @@ import {
   POLL_CLOSE_RE,
   POLL_EDIT_OPEN_RE,
   RANK_RATE_RE,
+  RANK_RATE_GO_RE,
+  RANK_EDIT_OPEN_RE,
   RANK_ORDER_START_RE,
   RANK_ORDER_GO_RE,
   RANK_ORDER_CLOSE_RE,
@@ -52,6 +56,12 @@ export async function routeInteraction(
     // Rank interactions
     if (RANK_RATE_RE.test(id)) {
       return await handleRankStarVoteOpen(interaction as ButtonInteraction);
+    }
+    if (RANK_RATE_GO_RE.test(id)) {
+      return await handleRankRateGo(interaction as ButtonInteraction);
+    }
+    if (RANK_EDIT_OPEN_RE.test(id)) {
+      return await handleRankEditButton(interaction as ButtonInteraction);
     }
     if (RANK_ORDER_START_RE.test(id)) {
       return await handleRankOrderStart(interaction as ButtonInteraction);

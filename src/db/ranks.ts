@@ -108,6 +108,53 @@ export function getOpenRanksByCreator(creatorId: string, channelId: string): Ran
     .all(creatorId, channelId) as Rank[];
 }
 
+export function updateRank(
+  rankId: string,
+  updates: {
+    title: string;
+    mode: 'star' | 'order';
+    anonymous: number;
+    show_live: number;
+    options: string[];
+  },
+): boolean {
+  let votesCleared = false;
+  const tx = db.transaction(() => {
+    const currentRank = getRank(rankId);
+    if (!currentRank) return;
+
+    db.prepare(
+      'UPDATE ranks SET title = ?, mode = ?, anonymous = ?, show_live = ? WHERE id = ?',
+    ).run(updates.title, updates.mode, updates.anonymous, updates.show_live, rankId);
+
+    const currentOptions = getRankOptions(rankId);
+    const oldLabels = currentOptions.map((o) => o.label);
+    const newLabels = updates.options;
+    const optionsChanged =
+      oldLabels.length !== newLabels.length || oldLabels.some((l, i) => l !== newLabels[i]);
+    const modeChanged = currentRank.mode !== updates.mode;
+
+    // Rank votes are keyed by option_idx, so any option change invalidates indices.
+    // Order mode rankings depend on the full set. Mode changes make votes semantically invalid.
+    if (modeChanged || optionsChanged) {
+      const result = db.prepare('DELETE FROM rank_votes WHERE rank_id = ?').run(rankId);
+      if (result.changes > 0) votesCleared = true;
+    }
+
+    if (optionsChanged) {
+      db.prepare('DELETE FROM rank_options WHERE rank_id = ?').run(rankId);
+      const insertOption = db.prepare(
+        'INSERT INTO rank_options (rank_id, idx, label) VALUES (?, ?, ?)',
+      );
+      for (let i = 0; i < updates.options.length; i++) {
+        insertOption.run(rankId, i, updates.options[i]);
+      }
+    }
+  });
+  tx();
+  return votesCleared;
+}
+
 export function closeRank(rankId: string) {
   db.prepare('UPDATE ranks SET closed = 1 WHERE id = ?').run(rankId);
 }

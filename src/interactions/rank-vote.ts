@@ -3,7 +3,12 @@
  * - Star: Modal with SelectMenus per option (1-5 stars each, max 4 options)
  * - Order: Multi-step select menu flow, pick options from best to worst
  *
- * The ordering flow uses an in-memory session map (lost on restart).
+ * Creator flow (both modes):
+ * 1. Creator clicks Rate/Submit → ephemeral with Rate|Rank / Edit / Close buttons
+ * 2. Rate/Rank opens the vote modal/flow, Edit opens edit modal, Close closes rank
+ *
+ * The creator session stores the original button interaction so the rank
+ * message can be refreshed after actions taken from the ephemeral.
  */
 
 import {
@@ -20,15 +25,18 @@ import {
 } from 'discord.js';
 import {
   parseRankRate,
+  parseRankRateGo,
   parseRankOrderStart,
   parseRankOrderStep,
   parseRankOrderGo,
   parseRankOrderClose,
+  rankRateGoId,
+  rankEditOpenId,
+  rankCloseId,
   rankOrderStepId,
   rankOrderGoId,
   rankOrderCloseId,
   RANK_STAR_VOTE_MODAL_PREFIX,
-  MODAL_RANK_CLOSE,
   modalRankStarId,
 } from '../util/ids.js';
 import type { Rank, RankOption } from '../db/ranks.js';
@@ -46,28 +54,31 @@ import { buildRankRateComponents, buildRankOrderComponents } from '../util/compo
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
 
 // ---------------------------------------------------------------------------
-// Star rating — modal open
+// Creator session map (star mode)
 // ---------------------------------------------------------------------------
 
-/** Opens the star rating modal when the "Rate" button is clicked. */
-export async function handleRankStarVoteOpen(interaction: ButtonInteraction) {
-  const parsed = parseRankRate(interaction.customId);
-  if (!parsed) return;
-
-  const { rankId } = parsed;
-  const rank = getRank(rankId);
-  if (!rank || rank.closed) {
-    await interaction.reply({ content: 'This ranking is closed.', flags: MessageFlags.Ephemeral });
-    return;
+/** In-memory creator sessions for star mode — keyed by "rankId:userId". */
+export const rankCreatorSessions = new Map<
+  string,
+  {
+    rankId: string;
+    /** The original button interaction on the rank message, used to refresh the embed. */
+    rankInteraction: ButtonInteraction;
   }
+>();
 
-  const options = getRankOptions(rankId);
-  const userVotes = getUserRankVotes(rankId, interaction.user.id);
-  const currentRatings = new Map(userVotes.map((v) => [v.option_idx, v.value]));
+// ---------------------------------------------------------------------------
+// Star rating — helpers
+// ---------------------------------------------------------------------------
 
-  // One StringSelect per option — pre-select the user's current rating
+/** Builds the star vote modal payload for a given rank and user. */
+function buildStarVoteModal(
+  rankId: string,
+  options: RankOption[],
+  currentRatings: Map<number, number>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const components: any[] = options.map((opt, i) => ({
+): any {
+  const components = options.map((opt, i) => ({
     type: ComponentType.Label,
     label: `Rate: ${opt.label}`.slice(0, 45),
     component: {
@@ -85,29 +96,81 @@ export async function handleRankStarVoteOpen(interaction: ButtonInteraction) {
     },
   }));
 
-  // Creator-only close option (only if room — max 5 components)
-  if (interaction.user.id === rank.creator_id && components.length < 5) {
-    components.push({
-      type: ComponentType.Label,
-      label: 'Creator Options',
-      component: {
-        type: ComponentType.CheckboxGroup,
-        custom_id: MODAL_RANK_CLOSE,
-        min_values: 0,
-        max_values: 1,
-        required: false,
-        options: [{ label: 'Close this ranking', value: 'close', default: false }],
-      },
-    });
-  }
-
-  const modalPayload = {
+  return {
     title: 'Rate',
     custom_id: `${RANK_STAR_VOTE_MODAL_PREFIX}${rankId}`,
     components,
   };
+}
 
-  await interaction.showModal(modalPayload);
+// ---------------------------------------------------------------------------
+// Star rating — modal open
+// ---------------------------------------------------------------------------
+
+/** Handles the "Rate" button on the rank message. */
+export async function handleRankStarVoteOpen(interaction: ButtonInteraction) {
+  const parsed = parseRankRate(interaction.customId);
+  if (!parsed) return;
+
+  const { rankId } = parsed;
+  const rank = getRank(rankId);
+  if (!rank || rank.closed) {
+    await interaction.reply({ content: 'This ranking is closed.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // Creator: show ephemeral with Rate / Edit / Close buttons
+  if (interaction.user.id === rank.creator_id) {
+    await interaction.deferUpdate();
+    const key = sessionKey(rankId, interaction.user.id);
+    rankCreatorSessions.set(key, { rankId, rankInteraction: interaction });
+
+    const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(rankRateGoId(rankId))
+        .setLabel('Rate')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(rankEditOpenId(rankId))
+        .setLabel('Edit Ranking')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(rankCloseId(rankId))
+        .setLabel('Close Ranking')
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    await interaction.followUp({
+      content: 'What would you like to do?',
+      components: [row],
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Non-creator: open star vote modal directly
+  const options = getRankOptions(rankId);
+  const userVotes = getUserRankVotes(rankId, interaction.user.id);
+  const currentRatings = new Map(userVotes.map((v) => [v.option_idx, v.value]));
+  await interaction.showModal(buildStarVoteModal(rankId, options, currentRatings));
+}
+
+/** Creator clicked "Rate" on the ephemeral — opens the star vote modal. */
+export async function handleRankRateGo(interaction: ButtonInteraction) {
+  const parsed = parseRankRateGo(interaction.customId);
+  if (!parsed) return;
+
+  const { rankId } = parsed;
+  const rank = getRank(rankId);
+  if (!rank || rank.closed) {
+    await interaction.reply({ content: 'This ranking is closed.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const options = getRankOptions(rankId);
+  const userVotes = getUserRankVotes(rankId, interaction.user.id);
+  const currentRatings = new Map(userVotes.map((v) => [v.option_idx, v.value]));
+  await interaction.showModal(buildStarVoteModal(rankId, options, currentRatings));
 }
 
 // ---------------------------------------------------------------------------
@@ -125,38 +188,41 @@ export async function handleRankStarVoteSubmit(interaction: ModalSubmitInteracti
 
   const options = getRankOptions(rankId);
   const rawComponents = getRawModalComponents(interaction);
-  const creatorAction = getCheckboxValues(rawComponents, MODAL_RANK_CLOSE)[0];
-
-  // --- Branch: Creator chose "Close" ---
-  if (creatorAction === 'close' && interaction.user.id === rank.creator_id) {
-    // Record any ratings before closing
-    recordStarRatings(rank, options, rawComponents, interaction.user.id);
-    closeRank(rankId);
-    const updatedRank = getRank(rankId)!;
-    const votes = getRankVotes(rankId);
-    const embed = buildRankEmbed(updatedRank, options, votes, true);
-
-    await interaction.deferUpdate();
-    await interaction.editReply({ embeds: [embed], components: [] });
-    return;
-  }
-
-  // --- Branch: Regular rating ---
   recordStarRatings(rank, options, rawComponents, interaction.user.id);
-  await refreshRankMessage(interaction, rank, options, rankId);
 
-  // Ephemeral confirmation when results aren't live
-  if (!rank.show_live) {
-    const rated = options
-      .map((opt, i) => {
-        const val = getCheckboxValues(rawComponents, modalRankStarId(i))[0];
-        return val ? `**${opt.label}**: ${'⭐'.repeat(parseInt(val, 10))}` : null;
-      })
-      .filter(Boolean);
+  // Build confirmation summary
+  const rated = options
+    .map((opt, i) => {
+      const val = getCheckboxValues(rawComponents, modalRankStarId(i))[0];
+      return val ? `**${opt.label}**: ${'⭐'.repeat(parseInt(val, 10))}` : null;
+    })
+    .filter(Boolean);
+  const summary =
+    rated.length > 0 ? `Ratings recorded!\n${rated.join('\n')}` : 'No ratings submitted.';
 
-    const message =
-      rated.length > 0 ? `Ratings recorded!\n${rated.join('\n')}` : 'No ratings submitted.';
-    await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });
+  // Check for creator session (modal was opened from the ephemeral)
+  const key = sessionKey(rankId, interaction.user.id);
+  const session = rankCreatorSessions.get(key);
+
+  if (session?.rankInteraction) {
+    // Creator path: refresh rank message via stored interaction
+    const votes = getRankVotes(rankId);
+    const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
+    const components = buildRankRateComponents(rankId);
+    try {
+      await session.rankInteraction.editReply({ embeds: [embed], components });
+    } catch {
+      // Token may have expired — embed will refresh on next interaction
+    }
+
+    await interaction.reply({ content: summary, flags: MessageFlags.Ephemeral });
+  } else {
+    // Non-creator path: refresh via deferUpdate + editReply
+    await refreshRankMessage(interaction, rank, options, rankId);
+
+    if (!rank.show_live) {
+      await interaction.followUp({ content: summary, flags: MessageFlags.Ephemeral });
+    }
   }
 }
 
@@ -229,13 +295,17 @@ export async function handleRankOrderStart(interaction: ButtonInteraction) {
   // Store the interaction so we can refresh the rank message after the flow completes
   orderingSessions.set(key, { rankId, picks: [], rankInteraction: interaction });
 
-  // Creator sees "Rank" + "Close" buttons; others go straight to the select menu flow
+  // Creator sees "Rank" + "Edit" + "Close" buttons; others go straight to the select menu flow
   if (interaction.user.id === rank.creator_id) {
     const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(rankOrderGoId(rankId))
         .setLabel('Rank')
         .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(rankEditOpenId(rankId))
+        .setLabel('Edit Ranking')
+        .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(rankOrderCloseId(rankId))
         .setLabel('Close Ranking')

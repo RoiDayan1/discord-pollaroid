@@ -11,12 +11,14 @@ import { handlePollVoteModalSubmit } from './interactions/poll-vote.js';
 import { handlePollEditModalSubmit } from './interactions/poll-edit.js';
 import { handleRankModalSubmit } from './commands/rank.js';
 import { handleRankStarVoteSubmit } from './interactions/rank-vote.js';
+import { handleRankEditModalSubmit } from './interactions/rank-edit.js';
 import {
   POLL_MODAL_ID,
   POLL_VOTE_MODAL_PREFIX,
   POLL_EDIT_MODAL_PREFIX,
   RANK_MODAL_ID,
   RANK_STAR_VOTE_MODAL_PREFIX,
+  RANK_EDIT_MODAL_PREFIX,
 } from './util/ids.js';
 import { safeErrorReply } from './util/errors.js';
 
@@ -56,6 +58,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await handleRankModalSubmit(interaction);
       } else if (interaction.customId.startsWith(RANK_STAR_VOTE_MODAL_PREFIX)) {
         await handleRankStarVoteSubmit(interaction);
+      } else if (interaction.customId.startsWith(RANK_EDIT_MODAL_PREFIX)) {
+        await handleRankEditModalSubmit(interaction);
       }
     } catch (err) {
       console.error(`Error handling modal ${interaction.customId}:`, err);

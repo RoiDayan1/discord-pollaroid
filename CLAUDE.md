@@ -35,8 +35,9 @@ src/
     poll-vote.ts        # Poll voting (creator ephemeral flow + direct modal for others)
     poll-close.ts       # Close poll (creator only)
     poll-edit.ts        # Edit poll (creator only, pre-filled modal)
-    rank-vote.ts        # Star rating modal + ordering step-by-step flow
-    rank-close.ts       # Close rank (star mode message button, currently unused)
+    rank-vote.ts        # Rank voting (creator ephemeral flow + direct modal/flow for others)
+    rank-close.ts       # Close rank (creator only, from star mode ephemeral)
+    rank-edit.ts        # Edit rank (creator only, pre-filled modal)
 
   db/                   # SQLite via better-sqlite3 (synchronous)
     connection.ts       # DB instance (WAL mode, foreign keys ON)
@@ -95,14 +96,18 @@ src/
 - Non-live polls reply with ephemeral confirmation message
 
 ### Rank Star Voting Flow
-- Rate button opens a modal with one StringSelect per option (1-5 stars), pre-selected to existing ratings
-- If creator and room in modal (< 5 components), adds a "Close this ranking" CheckboxGroup inside the modal
-- Creator can close directly from the star vote modal submit
+- **Non-creator**: Rate button opens a modal with one StringSelect per option (1-5 stars) directly
+- **Creator**: Rate button → `deferUpdate` + ephemeral with Rate/Edit/Close buttons → chosen action
+  - Rate: opens the same StringSelect modal
+  - Edit: opens pre-filled edit modal (title, options, mode, settings); `updateRank()` clears ALL votes if options/mode changed
+  - Close: closes the ranking
+- Previous ratings are pre-selected via `default: true` on StringSelect options
+- Creator sessions stored in `rankCreatorSessions` Map (`rankId:userId` → interaction reference)
 
 ### Rank Ordering Flow
 - Step-by-step ephemeral flow using StringSelectMenu
-- Session map stores picks as user progresses (`rankId:userId` → interaction + picks)
-- Creator gets ephemeral with Rank/Close buttons; non-creator goes straight to step 1
+- Session map (`orderingSessions`) stores picks as user progresses (`rankId:userId` → interaction + picks)
+- Creator gets ephemeral with Rank/Edit/Close buttons; non-creator goes straight to step 1
 - Last option auto-assigned when only one remains
 - Results update via stored `rankInteraction.editReply()` on the original message
 

@@ -4,6 +4,7 @@ import { type ButtonInteraction, MessageFlags } from 'discord.js';
 import { parseRankClose } from '../util/ids.js';
 import { getRank, getRankOptions, getRankVotes, closeRank } from '../db/ranks.js';
 import { buildRankEmbed } from '../util/embeds.js';
+import { rankCreatorSessions } from './rank-vote.js';
 
 export async function handleRankClose(interaction: ButtonInteraction) {
   const parsed = parseRankClose(interaction.customId);
@@ -31,11 +32,27 @@ export async function handleRankClose(interaction: ButtonInteraction) {
 
   closeRank(rankId);
 
-  // Show final results with no action buttons
   const options = getRankOptions(rankId);
   const votes = getRankVotes(rankId);
   const updatedRank = getRank(rankId)!;
   const embed = buildRankEmbed(updatedRank, options, votes, true);
 
-  await interaction.update({ embeds: [embed], components: [] });
+  // Check for creator session (button clicked from the star mode ephemeral)
+  const key = `${rankId}:${interaction.user.id}`;
+  const session = rankCreatorSessions.get(key);
+
+  if (session?.rankInteraction) {
+    await interaction.update({ content: 'Ranking closed!', components: [] });
+
+    try {
+      await session.rankInteraction.editReply({ embeds: [embed], components: [] });
+    } catch {
+      // Token may have expired — embed will refresh on next interaction
+    }
+
+    rankCreatorSessions.delete(key);
+  } else {
+    // Fallback: update the message the button is on (e.g. direct close button on message)
+    await interaction.update({ embeds: [embed], components: [] });
+  }
 }
