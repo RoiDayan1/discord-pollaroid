@@ -24,6 +24,7 @@ export const COLORS = {
 
 export const EMPTY_SPACE = '\u2800';
 
+export const BAR_PREFIX = '╴';
 export const BAR_FILLED = '▰';
 export const BAR_EMPTY = '▱';
 export const BAR_LENGTH = 15;

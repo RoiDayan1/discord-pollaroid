@@ -5,6 +5,7 @@ import {
   BAR_EMPTY,
   BAR_FILLED,
   BAR_LENGTH,
+  BAR_PREFIX,
   COLORS,
   EMPTY_SPACE,
   EVERYONE_SENTINEL,
@@ -55,12 +56,21 @@ export function buildMessageContent(
   return { content, allowedMentions };
 }
 
+/** Renders a visual progress bar from a 0–1 ratio, e.g. `╴▰▰▰▰▱▱▱▱▱▱` */
 function progressBar(ratio: number): string {
   const filled = Math.round(ratio * BAR_LENGTH);
   const bar = BAR_FILLED.repeat(filled) + BAR_EMPTY.repeat(BAR_LENGTH - filled);
-  return `╴${bar}`;
+  return `${BAR_PREFIX}${bar}`;
 }
 
+/**
+ * Builds the Discord embed for a poll.
+ *
+ * When `showResults` is true, each option displays a progress bar, vote count,
+ * and (for public polls) up to 5 voter mentions. Otherwise just lists option labels.
+ *
+ * Footer shows: voter count | mode | anonymous/public | open/closed status.
+ */
 export function buildPollEmbed(
   poll: Poll,
   options: PollOption[],
@@ -71,6 +81,7 @@ export function buildPollEmbed(
   const embed = new EmbedBuilder().setColor(poll.closed ? COLORS.CLOSED : COLORS.POLL);
 
   if (showResults) {
+    // Tally votes per option — keyed by label since poll_votes stores option_label
     const voteCounts = new Map<string, { count: number; users: string[] }>();
     for (const opt of options) {
       voteCounts.set(opt.label, { count: 0, users: [] });
@@ -83,12 +94,13 @@ export function buildPollEmbed(
       }
     }
 
+    // Build each option line: label, progress bar, vote count, and optional voter mentions
     const lines = options.map((opt) => {
       const entry = voteCounts.get(opt.label)!;
       const pct = totalVoters > 0 ? entry.count / totalVoters : 0;
-      // const pctStr = `${Math.round(pct * 100)}%`;
       const bar = progressBar(pct);
       let line = `**${opt.label}**\n${bar}${EMPTY_SPACE}${EMPTY_SPACE}**${entry.count}** vote${entry.count !== 1 ? 's' : ''}`;
+      // Public polls: show up to 5 voter mentions, with a "+N more" overflow
       if (!poll.anonymous && entry.users.length > 0) {
         const userMentions = entry.users
           .slice(0, 5)
@@ -102,10 +114,12 @@ export function buildPollEmbed(
 
     embed.setDescription(lines.join('\n\n'));
   } else {
+    // Hidden results — just show option labels
     const lines = options.map((opt) => `**${opt.label}**`);
     embed.setDescription(lines.join('\n'));
   }
 
+  // Footer: voter count | mode | visibility | status
   const modeLabel = poll.mode === PollMode.Single ? 'Single Choice' : 'Multiple Choice';
   const anonLabel = poll.anonymous ? 'Anonymous' : 'Public';
   const statusLabel = poll.closed ? 'Closed' : 'Open';
@@ -119,6 +133,16 @@ export function buildPollEmbed(
   return embed;
 }
 
+/**
+ * Builds the Discord embed for a ranking.
+ *
+ * Three display modes depending on `showResults` and `rank.mode`:
+ * - **Star + results**: star emoji, average rating, rating count, and voter mentions
+ * - **Order + results**: options sorted by average rank position (lowest = best)
+ * - **No results**: instruction text + option labels
+ *
+ * Footer shows: voter count | mode | anonymous/public | open/closed status.
+ */
 export function buildRankEmbed(
   rank: Rank,
   options: RankOption[],
@@ -129,6 +153,7 @@ export function buildRankEmbed(
   const embed = new EmbedBuilder().setColor(rank.closed ? COLORS.CLOSED : COLORS.RANK);
 
   if (showResults && rank.mode === RankMode.Star) {
+    // Aggregate star ratings per option — sum, count, and unique voters
     const stats = new Map<number, { sum: number; count: number; users: string[] }>();
     for (const opt of options) {
       stats.set(opt.idx, { sum: 0, count: 0, users: [] });
@@ -142,12 +167,14 @@ export function buildRankEmbed(
       }
     }
 
+    // Build each option line: label, star emoji, average, rating count, voter mentions
     const lines = options.map((opt) => {
       const entry = stats.get(opt.idx)!;
       const avg = entry.count > 0 ? entry.sum / entry.count : 0;
       const avgStr = entry.count > 0 ? avg.toFixed(1) : '—';
       const stars = entry.count > 0 ? starsDisplay(avg) : '';
       let line = `**${opt.label}**\n${stars} **${avgStr}** avg (${entry.count} rating${entry.count !== 1 ? 's' : ''})`;
+      // Public ranks: show up to 5 voter mentions, with a "+N more" overflow
       if (!rank.anonymous && entry.users.length > 0) {
         const userMentions = entry.users
           .slice(0, 5)
@@ -161,6 +188,7 @@ export function buildRankEmbed(
 
     embed.setDescription(lines.join('\n\n'));
   } else if (showResults && rank.mode === RankMode.Order) {
+    // Aggregate ordering positions per option — lower average = ranked higher
     const stats = new Map<number, { sum: number; count: number }>();
     for (const opt of options) {
       stats.set(opt.idx, { sum: 0, count: 0 });
@@ -173,6 +201,7 @@ export function buildRankEmbed(
       }
     }
 
+    // Sort by average rank position ascending (best first), unvoted options sink to bottom
     const sorted = options
       .map((opt) => {
         const entry = stats.get(opt.idx)!;
@@ -188,6 +217,7 @@ export function buildRankEmbed(
 
     embed.setDescription(lines.join('\n'));
   } else {
+    // Hidden results — show mode-specific instructions + option labels
     const lines = options.map((opt) => `**${opt.label}**`);
     const modeDesc =
       rank.mode === RankMode.Star
@@ -196,6 +226,7 @@ export function buildRankEmbed(
     embed.setDescription(`${modeDesc}\n\n${lines.join('\n')}`);
   }
 
+  // Footer: voter count | mode | visibility | status
   const modeLabel = rank.mode === RankMode.Star ? 'Star Rating' : 'Ordering';
   const anonLabel = rank.anonymous ? 'Anonymous' : 'Public';
   const statusLabel = rank.closed ? 'Closed' : 'Open';
