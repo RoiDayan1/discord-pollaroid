@@ -1,3 +1,4 @@
+import { PollMode } from '../util/constants.js';
 import db from './connection.js';
 
 export interface Poll {
@@ -7,7 +8,7 @@ export interface Poll {
   message_id: string | null;
   creator_id: string;
   title: string;
-  mode: 'single' | 'multi';
+  mode: PollMode;
   anonymous: number;
   show_live: number;
   mentions: string;
@@ -110,7 +111,7 @@ export function updatePoll(
   pollId: string,
   updates: {
     title: string;
-    mode: 'single' | 'multi';
+    mode: PollMode;
     anonymous: number;
     show_live: number;
     mentions: string;
@@ -141,7 +142,7 @@ export function updatePoll(
     const modeChanged = currentPoll.mode !== updates.mode;
 
     // Single→multi is fine, but multi→single may leave users with multiple votes
-    if (modeChanged && updates.mode === 'single') {
+    if (modeChanged && updates.mode === PollMode.Single) {
       db.prepare('DELETE FROM poll_votes WHERE poll_id = ?').run(pollId);
       votesCleared = true;
     } else if (optionsChanged) {

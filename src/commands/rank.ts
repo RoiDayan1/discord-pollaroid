@@ -19,18 +19,19 @@ import {
   getRankVotes,
   setRankMessageId,
 } from '../db/ranks.js';
-import { buildRankRateComponents, buildRankOrderComponents } from '../util/components.js';
+import { buildRankOrderComponents, buildRankRateComponents } from '../util/components.js';
+import { EVERYONE_SENTINEL, RankMode, Setting } from '../util/constants.js';
 import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
 import {
   generateId,
-  RANK_MODAL_ID,
-  MODAL_RANK_TITLE,
-  MODAL_RANK_OPTIONS,
-  MODAL_RANK_MODE,
-  MODAL_RANK_SETTINGS,
   MODAL_RANK_MENTIONS,
+  MODAL_RANK_MODE,
+  MODAL_RANK_OPTIONS,
+  MODAL_RANK_SETTINGS,
+  MODAL_RANK_TITLE,
+  RANK_MODAL_ID,
 } from '../util/ids.js';
-import { getCheckboxValues, getRoleSelectValues, getRawModalComponents } from '../util/modal.js';
+import { getCheckboxValues, getRawModalComponents, getRoleSelectValues } from '../util/modal.js';
 import { parseOptions, validateRankOptions } from '../util/validation.js';
 
 const RANK_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
@@ -128,14 +129,14 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
   const optionsRaw = interaction.fields.getTextInputValue(MODAL_RANK_OPTIONS);
   const rawComponents = getRawModalComponents(interaction);
 
-  const modeValues = getCheckboxValues(rawComponents, MODAL_RANK_MODE);
-  const settingsValues = getCheckboxValues(rawComponents, MODAL_RANK_SETTINGS);
+  const modeValues = getCheckboxValues(rawComponents, MODAL_RANK_MODE) as RankMode[];
+  const settingsValues = getCheckboxValues(rawComponents, MODAL_RANK_SETTINGS) as Setting[];
 
-  const mode = (modeValues[0] ?? 'star') as 'star' | 'order';
-  const anonymous = settingsValues.includes('anonymous');
-  const showLive = settingsValues.length > 0 ? settingsValues.includes('show_live') : true;
+  const mode = modeValues[0] ?? RankMode.Star;
+  const anonymous = settingsValues.includes(Setting.Anonymous);
+  const showLive = settingsValues.length > 0 ? settingsValues.includes(Setting.ShowLive) : true;
   const mentionRoleIds: string[] = getRoleSelectValues(rawComponents, MODAL_RANK_MENTIONS);
-  if (settingsValues.includes('mention_everyone')) mentionRoleIds.unshift('everyone');
+  if (settingsValues.includes(Setting.MentionEveryone)) mentionRoleIds.unshift(EVERYONE_SENTINEL);
   const mentions = JSON.stringify(mentionRoleIds);
 
   // Parse and validate options
@@ -170,7 +171,7 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
   const votes = getRankVotes(rankId);
   const embed = buildRankEmbed(rank, rankOptions, votes, showLive);
   const components =
-    mode === 'star' ? buildRankRateComponents(rankId) : buildRankOrderComponents(rankId);
+    mode === RankMode.Star ? buildRankRateComponents(rankId) : buildRankOrderComponents(rankId);
 
   await interaction.reply({
     ...buildMessageContent(title, mentions),

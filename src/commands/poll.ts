@@ -22,6 +22,7 @@ import {
 } from '../db/polls.js';
 import { buildPollComponents } from '../util/components.js';
 import { buildMessageContent, buildPollEmbed } from '../util/embeds.js';
+import { PollMode, Setting, EVERYONE_SENTINEL } from '../util/constants.js';
 import {
   generateId,
   POLL_MODAL_ID,
@@ -130,15 +131,15 @@ export async function handlePollModalSubmit(interaction: ModalSubmitInteraction)
   const rawComponents = getRawModalComponents(interaction);
 
   // Extract checkbox selections
-  const modeValues = getCheckboxValues(rawComponents, MODAL_POLL_MODE);
-  const settingsValues = getCheckboxValues(rawComponents, MODAL_POLL_SETTINGS);
+  const modeValues = getCheckboxValues(rawComponents, MODAL_POLL_MODE) as PollMode[];
+  const settingsValues = getCheckboxValues(rawComponents, MODAL_POLL_SETTINGS) as Setting[];
 
-  const mode = (modeValues[0] ?? 'single') as 'single' | 'multi';
-  const anonymous = settingsValues.includes('anonymous');
+  const mode = modeValues[0] ?? PollMode.Single;
+  const anonymous = settingsValues.includes(Setting.Anonymous);
   // Default to show_live when settings is empty (first-time creation)
-  const showLive = settingsValues.length > 0 ? settingsValues.includes('show_live') : true;
+  const showLive = settingsValues.length > 0 ? settingsValues.includes(Setting.ShowLive) : true;
   const mentionRoleIds: string[] = getRoleSelectValues(rawComponents, MODAL_POLL_MENTIONS);
-  if (settingsValues.includes('mention_everyone')) mentionRoleIds.unshift('everyone');
+  if (settingsValues.includes(Setting.MentionEveryone)) mentionRoleIds.unshift(EVERYONE_SENTINEL);
   const mentions = JSON.stringify(mentionRoleIds);
 
   // Parse and validate options

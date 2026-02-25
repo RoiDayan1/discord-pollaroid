@@ -10,24 +10,25 @@ import {
   type ButtonInteraction,
   type ModalSubmitInteraction,
   ComponentType,
-  TextInputStyle,
   MessageFlags,
   SelectMenuDefaultValueType,
+  TextInputStyle,
 } from 'discord.js';
 import { getRank, getRankOptions, getRankVotes, updateRank } from '../db/ranks.js';
+import { buildRankOrderComponents, buildRankRateComponents } from '../util/components.js';
+import { EVERYONE_SENTINEL, RankMode, Setting } from '../util/constants.js';
+import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
 import {
+  MODAL_RANK_MENTIONS,
+  MODAL_RANK_MODE,
+  MODAL_RANK_OPTIONS,
+  MODAL_RANK_SETTINGS,
+  MODAL_RANK_TITLE,
   parseRankEditOpen,
   RANK_EDIT_MODAL_PREFIX,
-  MODAL_RANK_TITLE,
-  MODAL_RANK_OPTIONS,
-  MODAL_RANK_MODE,
-  MODAL_RANK_SETTINGS,
-  MODAL_RANK_MENTIONS,
 } from '../util/ids.js';
-import { getRawModalComponents, getCheckboxValues, getRoleSelectValues } from '../util/modal.js';
+import { getCheckboxValues, getRawModalComponents, getRoleSelectValues } from '../util/modal.js';
 import { parseOptions, validateRankOptions } from '../util/validation.js';
-import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
-import { buildRankRateComponents, buildRankOrderComponents } from '../util/components.js';
 import { rankCreatorSessions } from './rank-vote.js';
 
 /** Handles the "Edit Ranking" button click — shows a pre-filled edit modal. */
@@ -56,8 +57,8 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
   const options = getRankOptions(rankId);
   const optionText = options.map((o) => o.label).join('\n');
   const currentMentions: string[] = JSON.parse(rank.mentions);
-  const hasEveryone = currentMentions.includes('everyone');
-  const roleOnlyMentions = currentMentions.filter((id) => id !== 'everyone');
+  const hasEveryone = currentMentions.includes(EVERYONE_SENTINEL);
+  const roleOnlyMentions = currentMentions.filter((id) => id !== EVERYONE_SENTINEL);
 
   const components: APIModalInteractionResponseCallbackComponent[] = [
     {
@@ -179,14 +180,14 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
   const optionsRaw = interaction.fields.getTextInputValue(MODAL_RANK_OPTIONS);
   const rawComponents = getRawModalComponents(interaction);
 
-  const modeValues = getCheckboxValues(rawComponents, MODAL_RANK_MODE);
-  const settingsValues = getCheckboxValues(rawComponents, MODAL_RANK_SETTINGS);
+  const modeValues = getCheckboxValues(rawComponents, MODAL_RANK_MODE) as RankMode[];
+  const settingsValues = getCheckboxValues(rawComponents, MODAL_RANK_SETTINGS) as Setting[];
 
-  const mode = (modeValues[0] ?? 'star') as 'star' | 'order';
-  const anonymous = settingsValues.includes('anonymous');
-  const showLive = settingsValues.includes('show_live');
+  const mode = modeValues[0] ?? RankMode.Star;
+  const anonymous = settingsValues.includes(Setting.Anonymous);
+  const showLive = settingsValues.includes(Setting.ShowLive);
   const mentionRoleIds: string[] = getRoleSelectValues(rawComponents, MODAL_RANK_MENTIONS);
-  if (settingsValues.includes('mention_everyone')) mentionRoleIds.unshift('everyone');
+  if (settingsValues.includes(Setting.MentionEveryone)) mentionRoleIds.unshift(EVERYONE_SENTINEL);
   const mentions = JSON.stringify(mentionRoleIds);
 
   const options = parseOptions(optionsRaw);
@@ -224,7 +225,7 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
       const votes = getRankVotes(rankId);
       const embed = buildRankEmbed(updatedRank, updatedOptions, votes, !!updatedRank.show_live);
       const components =
-        updatedRank.mode === 'star'
+        updatedRank.mode === RankMode.Star
           ? buildRankRateComponents(rankId)
           : buildRankOrderComponents(rankId);
       await storedInteraction.editReply({

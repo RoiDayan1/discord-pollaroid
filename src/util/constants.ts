@@ -1,3 +1,21 @@
+export enum PollMode {
+  Single = 'single',
+  Multi = 'multi',
+}
+
+export enum RankMode {
+  Star = 'star',
+  Order = 'order',
+}
+
+export enum Setting {
+  Anonymous = 'anonymous',
+  ShowLive = 'show_live',
+  MentionEveryone = 'mention_everyone',
+}
+
+export const EVERYONE_SENTINEL = 'everyone';
+
 export const COLORS = {
   POLL: 0x5865f2, // Discord blurple
   RANK: 0xfee75c, // Yellow

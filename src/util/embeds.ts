@@ -1,7 +1,16 @@
 import { EmbedBuilder } from 'discord.js';
 import type { Poll, PollOption, PollVote } from '../db/polls.js';
 import type { Rank, RankOption, RankVote } from '../db/ranks.js';
-import { BAR_EMPTY, BAR_FILLED, BAR_LENGTH, COLORS, starsDisplay } from './constants.js';
+import {
+  BAR_EMPTY,
+  BAR_FILLED,
+  BAR_LENGTH,
+  COLORS,
+  EVERYONE_SENTINEL,
+  PollMode,
+  RankMode,
+  starsDisplay,
+} from './constants.js';
 
 /**
  * Builds the message content string with optional role mentions before the title,
@@ -23,8 +32,8 @@ export function buildMessageContent(
   mentions: string,
 ): { content: string; allowedMentions: { roles: string[]; parse?: 'everyone'[] } } {
   const all: string[] = JSON.parse(mentions);
-  const hasEveryone = all.includes('everyone');
-  const roleIds = all.filter((id) => id !== 'everyone');
+  const hasEveryone = all.includes(EVERYONE_SENTINEL);
+  const roleIds = all.filter((id) => id !== EVERYONE_SENTINEL);
 
   const parts: string[] = [];
   if (hasEveryone) parts.push('@everyone');
@@ -95,7 +104,7 @@ export function buildPollEmbed(
     embed.setDescription(lines.join('\n'));
   }
 
-  const modeLabel = poll.mode === 'single' ? 'Single Choice' : 'Multiple Choice';
+  const modeLabel = poll.mode === PollMode.Single ? 'Single Choice' : 'Multiple Choice';
   const anonLabel = poll.anonymous ? 'Anonymous' : 'Public';
   const statusLabel = poll.closed ? 'Closed' : 'Open';
   const voterTxt = `voter${totalVoters !== 1 ? 's' : ''}`;
@@ -117,7 +126,7 @@ export function buildRankEmbed(
   const totalVoters = new Set(votes.map((v) => v.user_id)).size;
   const embed = new EmbedBuilder().setColor(rank.closed ? COLORS.CLOSED : COLORS.RANK);
 
-  if (showResults && rank.mode === 'star') {
+  if (showResults && rank.mode === RankMode.Star) {
     const stats = new Map<number, { sum: number; count: number; users: string[] }>();
     for (const opt of options) {
       stats.set(opt.idx, { sum: 0, count: 0, users: [] });
@@ -149,7 +158,7 @@ export function buildRankEmbed(
     });
 
     embed.setDescription(lines.join('\n\n'));
-  } else if (showResults && rank.mode === 'order') {
+  } else if (showResults && rank.mode === RankMode.Order) {
     const stats = new Map<number, { sum: number; count: number }>();
     for (const opt of options) {
       stats.set(opt.idx, { sum: 0, count: 0 });
@@ -179,11 +188,13 @@ export function buildRankEmbed(
   } else {
     const lines = options.map((opt) => `**${opt.label}**`);
     const modeDesc =
-      rank.mode === 'star' ? 'Rate each option from 1-5 stars' : 'Rank options from best to worst';
+      rank.mode === RankMode.Star
+        ? 'Rate each option from 1-5 stars'
+        : 'Rank options from best to worst';
     embed.setDescription(`${modeDesc}\n\n${lines.join('\n')}`);
   }
 
-  const modeLabel = rank.mode === 'star' ? 'Star Rating' : 'Ordering';
+  const modeLabel = rank.mode === RankMode.Star ? 'Star Rating' : 'Ordering';
   const anonLabel = rank.anonymous ? 'Anonymous' : 'Public';
   const statusLabel = rank.closed ? 'Closed' : 'Open';
   let rankFooter = `${totalVoters} voter${totalVoters !== 1 ? 's' : ''} | ${modeLabel} | ${anonLabel} | ${statusLabel}`;

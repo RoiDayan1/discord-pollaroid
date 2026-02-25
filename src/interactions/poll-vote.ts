@@ -23,6 +23,7 @@ import {
   MessageFlags,
   type ModalSubmitInteraction,
 } from 'discord.js';
+import { PollMode } from '../util/constants.js';
 import type { Poll, PollOption } from '../db/polls.js';
 import {
   clearPollVotes,
@@ -74,7 +75,7 @@ function recordVote(poll: Poll, pollId: string, userId: string, selectedLabels: 
     clearPollVotes(pollId, userId);
     return;
   }
-  if (poll.mode === 'single') {
+  if (poll.mode === PollMode.Single) {
     votePollSingle(pollId, selectedLabels[0], userId);
   } else {
     votePollMulti(pollId, selectedLabels, userId);
@@ -115,7 +116,7 @@ async function showVoteModal(
     default: votedLabels.has(opt.label),
   }));
 
-  const isSingle = poll.mode === 'single';
+  const isSingle = poll.mode === PollMode.Single;
 
   const components: APIModalInteractionResponseCallbackComponent[] = [
     {

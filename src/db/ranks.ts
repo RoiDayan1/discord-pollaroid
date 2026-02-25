@@ -1,3 +1,4 @@
+import { RankMode } from '../util/constants.js';
 import db from './connection.js';
 
 export interface Rank {
@@ -7,7 +8,7 @@ export interface Rank {
   message_id: string | null;
   creator_id: string;
   title: string;
-  mode: 'star' | 'order';
+  mode: RankMode;
   anonymous: number;
   show_live: number;
   mentions: string;
@@ -113,7 +114,7 @@ export function updateRank(
   rankId: string,
   updates: {
     title: string;
-    mode: 'star' | 'order';
+    mode: RankMode;
     anonymous: number;
     show_live: number;
     mentions: string;

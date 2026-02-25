@@ -13,23 +13,24 @@ import {
   type ButtonInteraction,
   type ModalSubmitInteraction,
   ComponentType,
-  TextInputStyle,
   MessageFlags,
   SelectMenuDefaultValueType,
+  TextInputStyle,
 } from 'discord.js';
 import { getPoll, getPollOptions, getPollVotes, updatePoll } from '../db/polls.js';
 import { buildPollComponents } from '../util/components.js';
+import { EVERYONE_SENTINEL, PollMode, Setting } from '../util/constants.js';
 import { buildMessageContent, buildPollEmbed } from '../util/embeds.js';
 import {
+  MODAL_POLL_MENTIONS,
+  MODAL_POLL_MODE,
+  MODAL_POLL_OPTIONS,
+  MODAL_POLL_SETTINGS,
+  MODAL_POLL_TITLE,
   parsePollEditOpen,
   POLL_EDIT_MODAL_PREFIX,
-  MODAL_POLL_TITLE,
-  MODAL_POLL_OPTIONS,
-  MODAL_POLL_MODE,
-  MODAL_POLL_SETTINGS,
-  MODAL_POLL_MENTIONS,
 } from '../util/ids.js';
-import { getRawModalComponents, getCheckboxValues, getRoleSelectValues } from '../util/modal.js';
+import { getCheckboxValues, getRawModalComponents, getRoleSelectValues } from '../util/modal.js';
 import { parseOptions, validatePollOptions } from '../util/validation.js';
 import { pollCreatorSessions } from './poll-vote.js';
 
@@ -57,8 +58,8 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
   const options = getPollOptions(pollId);
   const optionText = options.map((o) => o.label).join('\n');
   const currentMentions: string[] = JSON.parse(poll.mentions);
-  const hasEveryone = currentMentions.includes('everyone');
-  const roleOnlyMentions = currentMentions.filter((id) => id !== 'everyone');
+  const hasEveryone = currentMentions.includes(EVERYONE_SENTINEL);
+  const roleOnlyMentions = currentMentions.filter((id) => id !== EVERYONE_SENTINEL);
 
   const components: APIModalInteractionResponseCallbackComponent[] = [
     {
@@ -178,14 +179,14 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
   const optionsRaw = interaction.fields.getTextInputValue(MODAL_POLL_OPTIONS);
   const rawComponents = getRawModalComponents(interaction);
 
-  const modeValues = getCheckboxValues(rawComponents, MODAL_POLL_MODE);
-  const settingsValues = getCheckboxValues(rawComponents, MODAL_POLL_SETTINGS);
+  const modeValues = getCheckboxValues(rawComponents, MODAL_POLL_MODE) as PollMode[];
+  const settingsValues = getCheckboxValues(rawComponents, MODAL_POLL_SETTINGS) as Setting[];
 
-  const mode = (modeValues[0] ?? 'single') as 'single' | 'multi';
-  const anonymous = settingsValues.includes('anonymous');
-  const showLive = settingsValues.includes('show_live');
+  const mode = modeValues[0] ?? PollMode.Single;
+  const anonymous = settingsValues.includes(Setting.Anonymous);
+  const showLive = settingsValues.includes(Setting.ShowLive);
   const mentionRoleIds: string[] = getRoleSelectValues(rawComponents, MODAL_POLL_MENTIONS);
-  if (settingsValues.includes('mention_everyone')) mentionRoleIds.unshift('everyone');
+  if (settingsValues.includes(Setting.MentionEveryone)) mentionRoleIds.unshift(EVERYONE_SENTINEL);
   const mentions = JSON.stringify(mentionRoleIds);
 
   // Validate options

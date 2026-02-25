@@ -49,7 +49,7 @@ src/
     ids.ts              # nanoid generation + customId builders + regex patterns
     embeds.ts           # Poll/rank result embed builders + buildMessageContent()
     components.ts       # ActionRow/button builders for poll/rank messages
-    constants.ts        # Colors, labels, limits, star display
+    constants.ts        # Enums (PollMode, RankMode, Setting), EVERYONE_SENTINEL, colors, star display
     modal.ts            # Modal data extraction (getRawModalComponents, getCheckboxValues)
     errors.ts           # safeErrorReply helper
     validation.ts       # parseOptions, validatePollOptions, validateRankOptions
@@ -66,6 +66,13 @@ src/
 - `interactions/index.ts` routes by customId regex pattern
 - Pattern format: `<type>:<nanoid>:<action>[:<params>]`
 - Examples: `poll:a8Kx3nQ1:vote-open`, `rank:b7Yz2mP4:rate`, `rank:b7Yz2mP4:order-step:1`
+
+### Enums & Constants (`util/constants.ts`)
+- `PollMode`: `Single = 'single'`, `Multi = 'multi'`
+- `RankMode`: `Star = 'star'`, `Order = 'order'`
+- `Setting`: `Anonymous = 'anonymous'`, `ShowLive = 'show_live'`, `MentionEveryone = 'mention_everyone'`
+- `EVERYONE_SENTINEL = 'everyone'` — sentinel value in the mentions JSON array for @everyone
+- Always use these enums instead of raw string literals for modes and settings
 
 ### Database
 - SQLite file: `pollaroid.db` (project root)
