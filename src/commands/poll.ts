@@ -53,7 +53,7 @@ const POLL_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
     {
       type: ComponentType.Label as const,
       label: 'Options',
-      description: 'One option per line (minimum 2)',
+      description: 'One option per line (minimum 1)',
       component: {
         type: ComponentType.TextInput as const,
         custom_id: MODAL_POLL_OPTIONS,

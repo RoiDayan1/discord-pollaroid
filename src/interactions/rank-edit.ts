@@ -75,7 +75,7 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
     {
       type: ComponentType.Label,
       label: 'Options',
-      description: 'One option per line (minimum 2)',
+      description: 'One option per line (minimum 1; order mode requires 2)',
       component: {
         type: ComponentType.TextInput,
         custom_id: MODAL_RANK_OPTIONS,
@@ -191,7 +191,7 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
   const mentions = JSON.stringify(mentionRoleIds);
 
   const options = parseOptions(optionsRaw);
-  const error = validateRankOptions(options);
+  const error = validateRankOptions(options, mode);
   if (error) {
     await interaction.reply({ content: error, flags: MessageFlags.Ephemeral });
     return;

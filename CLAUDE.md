@@ -52,7 +52,7 @@ src/
     constants.ts        # Enums (PollMode, RankMode, Setting), EVERYONE_SENTINEL, colors, star display
     modal.ts            # Modal data extraction (getRawModalComponents, getCheckboxValues)
     errors.ts           # safeErrorReply helper
-    validation.ts       # parseOptions, validatePollOptions, validateRankOptions
+    validation.ts       # parseOptions, validatePollOptions, validateRankOptions (mode-aware)
 ```
 
 ## Architecture
@@ -145,6 +145,9 @@ src/
 | customId length            | 100   | 8-char nanoid keeps IDs short             |
 | Modal top-level components | 5     | Both creation modals use all 5 slots      |
 | Interaction response time  | 3s    | SQLite is fast, but defer if needed       |
+| Min poll options           | 1     | Single option polls are allowed            |
+| Min rank options (star)    | 1     | Single option star rankings are allowed    |
+| Min rank options (order)   | 2     | Ordering requires at least 2 options       |
 
 ## Environment
 
