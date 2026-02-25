@@ -10,6 +10,7 @@ export interface Rank {
   mode: 'star' | 'order';
   anonymous: number;
   show_live: number;
+  mentions: string;
   closed: number;
   created_at: string;
 }
@@ -31,8 +32,8 @@ export interface RankVote {
 
 export function createRank(rank: Omit<Rank, 'message_id' | 'created_at'>, options: string[]) {
   const insertRank = db.prepare(`
-    INSERT INTO ranks (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, closed)
-    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @closed)
+    INSERT INTO ranks (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, mentions, closed)
+    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @mentions, @closed)
   `);
   const insertOption = db.prepare(`
     INSERT INTO rank_options (rank_id, idx, label) VALUES (?, ?, ?)
@@ -115,6 +116,7 @@ export function updateRank(
     mode: 'star' | 'order';
     anonymous: number;
     show_live: number;
+    mentions: string;
     options: string[];
   },
 ): boolean {
@@ -124,8 +126,15 @@ export function updateRank(
     if (!currentRank) return;
 
     db.prepare(
-      'UPDATE ranks SET title = ?, mode = ?, anonymous = ?, show_live = ? WHERE id = ?',
-    ).run(updates.title, updates.mode, updates.anonymous, updates.show_live, rankId);
+      'UPDATE ranks SET title = ?, mode = ?, anonymous = ?, show_live = ?, mentions = ? WHERE id = ?',
+    ).run(
+      updates.title,
+      updates.mode,
+      updates.anonymous,
+      updates.show_live,
+      updates.mentions,
+      rankId,
+    );
 
     const currentOptions = getRankOptions(rankId);
     const oldLabels = currentOptions.map((o) => o.label);

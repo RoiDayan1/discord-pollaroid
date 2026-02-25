@@ -10,6 +10,7 @@ export interface Poll {
   mode: 'single' | 'multi';
   anonymous: number;
   show_live: number;
+  mentions: string;
   closed: number;
   created_at: string;
 }
@@ -30,8 +31,8 @@ export interface PollVote {
 
 export function createPoll(poll: Omit<Poll, 'message_id' | 'created_at'>, options: string[]) {
   const insertPoll = db.prepare(`
-    INSERT INTO polls (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, closed)
-    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @closed)
+    INSERT INTO polls (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, mentions, closed)
+    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @mentions, @closed)
   `);
   const insertOption = db.prepare(`
     INSERT INTO poll_options (poll_id, idx, label) VALUES (?, ?, ?)
@@ -112,6 +113,7 @@ export function updatePoll(
     mode: 'single' | 'multi';
     anonymous: number;
     show_live: number;
+    mentions: string;
     options: string[];
   },
 ): boolean {
@@ -121,8 +123,15 @@ export function updatePoll(
     if (!currentPoll) return;
 
     db.prepare(
-      'UPDATE polls SET title = ?, mode = ?, anonymous = ?, show_live = ? WHERE id = ?',
-    ).run(updates.title, updates.mode, updates.anonymous, updates.show_live, pollId);
+      'UPDATE polls SET title = ?, mode = ?, anonymous = ?, show_live = ?, mentions = ? WHERE id = ?',
+    ).run(
+      updates.title,
+      updates.mode,
+      updates.anonymous,
+      updates.show_live,
+      updates.mentions,
+      pollId,
+    );
 
     const currentOptions = getPollOptions(pollId);
     const oldLabels = new Set(currentOptions.map((o) => o.label));

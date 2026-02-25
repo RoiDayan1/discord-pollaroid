@@ -3,7 +3,7 @@
 import { type ButtonInteraction, MessageFlags } from 'discord.js';
 import { parsePollClose } from '../util/ids.js';
 import { getPoll, getPollOptions, getPollVotes, closePoll } from '../db/polls.js';
-import { buildPollEmbed } from '../util/embeds.js';
+import { buildMessageContent, buildPollEmbed } from '../util/embeds.js';
 import { pollCreatorSessions } from './poll-vote.js';
 
 export async function handlePollClose(interaction: ButtonInteraction) {
@@ -48,7 +48,11 @@ export async function handlePollClose(interaction: ButtonInteraction) {
 
     // Refresh the poll message via the stored interaction
     try {
-      await session.pollInteraction.editReply({ embeds: [embed], components: [] });
+      await session.pollInteraction.editReply({
+        ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
+        embeds: [embed],
+        components: [],
+      });
     } catch {
       // Token may have expired — embed will refresh on next interaction
     }
@@ -56,6 +60,10 @@ export async function handlePollClose(interaction: ButtonInteraction) {
     pollCreatorSessions.delete(key);
   } else {
     // Fallback: update the message the button is on
-    await interaction.update({ embeds: [embed], components: [] });
+    await interaction.update({
+      ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
+      embeds: [embed],
+      components: [],
+    });
   }
 }

@@ -20,7 +20,7 @@ import {
   setRankMessageId,
 } from '../db/ranks.js';
 import { buildRankRateComponents, buildRankOrderComponents } from '../util/components.js';
-import { buildRankEmbed } from '../util/embeds.js';
+import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
 import {
   generateId,
   RANK_MODAL_ID,
@@ -28,8 +28,9 @@ import {
   MODAL_RANK_OPTIONS,
   MODAL_RANK_MODE,
   MODAL_RANK_SETTINGS,
+  MODAL_RANK_MENTIONS,
 } from '../util/ids.js';
-import { getCheckboxValues, getRawModalComponents } from '../util/modal.js';
+import { getCheckboxValues, getRoleSelectValues, getRawModalComponents } from '../util/modal.js';
 import { parseOptions, validateRankOptions } from '../util/validation.js';
 
 const RANK_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
@@ -80,7 +81,7 @@ const RANK_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
         type: ComponentType.CheckboxGroup as const,
         custom_id: MODAL_RANK_SETTINGS,
         min_values: 0,
-        max_values: 2,
+        max_values: 3,
         required: false,
         options: [
           { label: 'Anonymous', value: 'anonymous', description: 'Hide voter names' },
@@ -90,7 +91,24 @@ const RANK_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
             description: 'Show results before closing',
             default: true,
           },
+          {
+            label: 'Mention @everyone',
+            value: 'mention_everyone',
+            description: 'Notify everyone in the channel',
+          },
         ],
+      },
+    },
+    {
+      type: ComponentType.Label as const,
+      label: 'Mention Roles',
+      description: 'Optional — mentioned roles will be notified',
+      component: {
+        type: ComponentType.RoleSelect as const,
+        custom_id: MODAL_RANK_MENTIONS,
+        min_values: 0,
+        max_values: 25,
+        required: false,
       },
     },
   ],
@@ -116,6 +134,9 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
   const mode = (modeValues[0] ?? 'star') as 'star' | 'order';
   const anonymous = settingsValues.includes('anonymous');
   const showLive = settingsValues.length > 0 ? settingsValues.includes('show_live') : true;
+  const mentionRoleIds: string[] = getRoleSelectValues(rawComponents, MODAL_RANK_MENTIONS);
+  if (settingsValues.includes('mention_everyone')) mentionRoleIds.unshift('everyone');
+  const mentions = JSON.stringify(mentionRoleIds);
 
   // Parse and validate options
   const options = parseOptions(optionsRaw);
@@ -137,6 +158,7 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
       mode,
       anonymous: anonymous ? 1 : 0,
       show_live: showLive ? 1 : 0,
+      mentions,
       closed: 0,
     },
     options,
@@ -150,7 +172,11 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
   const components =
     mode === 'star' ? buildRankRateComponents(rankId) : buildRankOrderComponents(rankId);
 
-  await interaction.reply({ embeds: [embed], components });
+  await interaction.reply({
+    ...buildMessageContent(title, mentions),
+    embeds: [embed],
+    components,
+  });
   const message = await interaction.fetchReply();
   setRankMessageId(rankId, message.id);
 }

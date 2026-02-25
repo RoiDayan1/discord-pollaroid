@@ -12,6 +12,7 @@ import {
   ComponentType,
   TextInputStyle,
   MessageFlags,
+  SelectMenuDefaultValueType,
 } from 'discord.js';
 import { getRank, getRankOptions, getRankVotes, updateRank } from '../db/ranks.js';
 import {
@@ -21,10 +22,11 @@ import {
   MODAL_RANK_OPTIONS,
   MODAL_RANK_MODE,
   MODAL_RANK_SETTINGS,
+  MODAL_RANK_MENTIONS,
 } from '../util/ids.js';
-import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
+import { getRawModalComponents, getCheckboxValues, getRoleSelectValues } from '../util/modal.js';
 import { parseOptions, validateRankOptions } from '../util/validation.js';
-import { buildRankEmbed } from '../util/embeds.js';
+import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
 import { buildRankRateComponents, buildRankOrderComponents } from '../util/components.js';
 import { rankCreatorSessions } from './rank-vote.js';
 
@@ -53,6 +55,9 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
 
   const options = getRankOptions(rankId);
   const optionText = options.map((o) => o.label).join('\n');
+  const currentMentions: string[] = JSON.parse(rank.mentions);
+  const hasEveryone = currentMentions.includes('everyone');
+  const roleOnlyMentions = currentMentions.filter((id) => id !== 'everyone');
 
   const components: APIModalInteractionResponseCallbackComponent[] = [
     {
@@ -99,7 +104,7 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
         type: ComponentType.CheckboxGroup,
         custom_id: MODAL_RANK_SETTINGS,
         min_values: 0,
-        max_values: 2,
+        max_values: 3,
         required: false,
         options: [
           {
@@ -114,7 +119,29 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
             description: 'Show results before closing',
             default: !!rank.show_live,
           },
+          {
+            label: 'Mention @everyone',
+            value: 'mention_everyone',
+            description: 'Notify everyone in the channel',
+            default: hasEveryone,
+          },
         ],
+      },
+    },
+    {
+      type: ComponentType.Label,
+      label: 'Mention Roles',
+      description: 'Optional — mentioned roles will be notified',
+      component: {
+        type: ComponentType.RoleSelect,
+        custom_id: MODAL_RANK_MENTIONS,
+        min_values: 0,
+        max_values: 25,
+        required: false,
+        default_values: roleOnlyMentions.map((id) => ({
+          type: SelectMenuDefaultValueType.Role,
+          id,
+        })),
       },
     },
   ];
@@ -158,6 +185,9 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
   const mode = (modeValues[0] ?? 'star') as 'star' | 'order';
   const anonymous = settingsValues.includes('anonymous');
   const showLive = settingsValues.includes('show_live');
+  const mentionRoleIds: string[] = getRoleSelectValues(rawComponents, MODAL_RANK_MENTIONS);
+  if (settingsValues.includes('mention_everyone')) mentionRoleIds.unshift('everyone');
+  const mentions = JSON.stringify(mentionRoleIds);
 
   const options = parseOptions(optionsRaw);
   const error = validateRankOptions(options);
@@ -171,6 +201,7 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
     mode,
     anonymous: anonymous ? 1 : 0,
     show_live: showLive ? 1 : 0,
+    mentions,
     options,
   });
 
@@ -196,7 +227,11 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
         updatedRank.mode === 'star'
           ? buildRankRateComponents(rankId)
           : buildRankOrderComponents(rankId);
-      await storedInteraction.editReply({ embeds: [embed], components });
+      await storedInteraction.editReply({
+        ...buildMessageContent(updatedRank.title, updatedRank.mentions),
+        embeds: [embed],
+        components,
+      });
     } catch {
       // Token may have expired — embed will refresh on next interaction
     }

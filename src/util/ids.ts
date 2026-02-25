@@ -45,6 +45,8 @@ export const MODAL_RANK_TITLE = 'rank_title';
 export const MODAL_RANK_OPTIONS = 'rank_options';
 export const MODAL_RANK_MODE = 'rank_mode';
 export const MODAL_RANK_SETTINGS = 'rank_settings';
+export const MODAL_POLL_MENTIONS = 'poll_mentions';
+export const MODAL_RANK_MENTIONS = 'rank_mentions';
 
 export function modalRankStarId(index: number): string {
   return `rank_star_${index}`;

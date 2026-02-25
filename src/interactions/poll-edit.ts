@@ -15,10 +15,11 @@ import {
   ComponentType,
   TextInputStyle,
   MessageFlags,
+  SelectMenuDefaultValueType,
 } from 'discord.js';
 import { getPoll, getPollOptions, getPollVotes, updatePoll } from '../db/polls.js';
 import { buildPollComponents } from '../util/components.js';
-import { buildPollEmbed } from '../util/embeds.js';
+import { buildMessageContent, buildPollEmbed } from '../util/embeds.js';
 import {
   parsePollEditOpen,
   POLL_EDIT_MODAL_PREFIX,
@@ -26,8 +27,9 @@ import {
   MODAL_POLL_OPTIONS,
   MODAL_POLL_MODE,
   MODAL_POLL_SETTINGS,
+  MODAL_POLL_MENTIONS,
 } from '../util/ids.js';
-import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
+import { getRawModalComponents, getCheckboxValues, getRoleSelectValues } from '../util/modal.js';
 import { parseOptions, validatePollOptions } from '../util/validation.js';
 import { pollCreatorSessions } from './poll-vote.js';
 
@@ -54,6 +56,9 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
   // Pre-fill modal with current poll values
   const options = getPollOptions(pollId);
   const optionText = options.map((o) => o.label).join('\n');
+  const currentMentions: string[] = JSON.parse(poll.mentions);
+  const hasEveryone = currentMentions.includes('everyone');
+  const roleOnlyMentions = currentMentions.filter((id) => id !== 'everyone');
 
   const components: APIModalInteractionResponseCallbackComponent[] = [
     {
@@ -100,7 +105,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
         type: ComponentType.CheckboxGroup,
         custom_id: MODAL_POLL_SETTINGS,
         min_values: 0,
-        max_values: 2,
+        max_values: 3,
         required: false,
         options: [
           {
@@ -115,7 +120,29 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
             description: 'Show results before closing',
             default: !!poll.show_live,
           },
+          {
+            label: 'Mention @everyone',
+            value: 'mention_everyone',
+            description: 'Notify everyone in the channel',
+            default: hasEveryone,
+          },
         ],
+      },
+    },
+    {
+      type: ComponentType.Label,
+      label: 'Mention Roles',
+      description: 'Optional — mentioned roles will be notified',
+      component: {
+        type: ComponentType.RoleSelect,
+        custom_id: MODAL_POLL_MENTIONS,
+        min_values: 0,
+        max_values: 25,
+        required: false,
+        default_values: roleOnlyMentions.map((id) => ({
+          type: SelectMenuDefaultValueType.Role,
+          id,
+        })),
       },
     },
   ];
@@ -157,6 +184,9 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
   const mode = (modeValues[0] ?? 'single') as 'single' | 'multi';
   const anonymous = settingsValues.includes('anonymous');
   const showLive = settingsValues.includes('show_live');
+  const mentionRoleIds: string[] = getRoleSelectValues(rawComponents, MODAL_POLL_MENTIONS);
+  if (settingsValues.includes('mention_everyone')) mentionRoleIds.unshift('everyone');
+  const mentions = JSON.stringify(mentionRoleIds);
 
   // Validate options
   const options = parseOptions(optionsRaw);
@@ -172,6 +202,7 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
     mode,
     anonymous: anonymous ? 1 : 0,
     show_live: showLive ? 1 : 0,
+    mentions,
     options,
   });
 
@@ -186,7 +217,11 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
     const embed = buildPollEmbed(updatedPoll, updatedOptions, votes, !!updatedPoll.show_live);
     const components = buildPollComponents(pollId);
     try {
-      await session.pollInteraction.editReply({ embeds: [embed], components });
+      await session.pollInteraction.editReply({
+        ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
+        embeds: [embed],
+        components,
+      });
     } catch {
       // Token may have expired — embed will refresh on next interaction
     }

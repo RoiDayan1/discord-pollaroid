@@ -34,7 +34,7 @@ import {
   votePollSingle,
 } from '../db/polls.js';
 import { buildPollComponents } from '../util/components.js';
-import { buildPollEmbed } from '../util/embeds.js';
+import { buildMessageContent, buildPollEmbed } from '../util/embeds.js';
 import {
   parsePollVoteOpen,
   parsePollVoteGo,
@@ -92,7 +92,11 @@ async function refreshPollMessage(
   const embed = buildPollEmbed(poll, options, votes, !!poll.show_live);
   const components = buildPollComponents(pollId);
   await interaction.deferUpdate();
-  await interaction.editReply({ embeds: [embed], components });
+  await interaction.editReply({
+    ...buildMessageContent(poll.title, poll.mentions),
+    embeds: [embed],
+    components,
+  });
 }
 
 /** Opens the vote modal (without creator options). */
@@ -234,7 +238,11 @@ export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteract
     const embed = buildPollEmbed(poll, options, votes, !!poll.show_live);
     const components = buildPollComponents(pollId);
     try {
-      await session.pollInteraction.editReply({ embeds: [embed], components });
+      await session.pollInteraction.editReply({
+        ...buildMessageContent(poll.title, poll.mentions),
+        embeds: [embed],
+        components,
+      });
     } catch {
       // Token may have expired — embed will refresh on next interaction
     }

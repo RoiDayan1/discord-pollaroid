@@ -3,6 +3,48 @@ import type { Poll, PollOption, PollVote } from '../db/polls.js';
 import type { Rank, RankOption, RankVote } from '../db/ranks.js';
 import { BAR_EMPTY, BAR_FILLED, BAR_LENGTH, COLORS, starsDisplay } from './constants.js';
 
+/**
+ * Builds the message content string with optional role mentions before the title,
+ * plus `allowedMentions` so Discord actually pings the roles.
+ * - 0 mentions: just the title
+ * - 1 mention: `@everyone Title` or `<@&roleId> Title` (inline)
+ * - 2+ mentions: `@everyone <@&id1> ...\nTitle` (title on new line)
+ *
+ * If the title starts with a markdown header (`#`), mentions are always
+ * placed on a separate line so Discord renders the heading correctly.
+ *
+ * The mentions JSON may contain `"everyone"` as a sentinel for @everyone.
+ *
+ * Spread the return value into your reply/editReply call:
+ *   `await interaction.reply({ ...buildMessageContent(title, mentions), embeds, components })`
+ */
+export function buildMessageContent(
+  title: string,
+  mentions: string,
+): { content: string; allowedMentions: { roles: string[]; parse?: 'everyone'[] } } {
+  const all: string[] = JSON.parse(mentions);
+  const hasEveryone = all.includes('everyone');
+  const roleIds = all.filter((id) => id !== 'everyone');
+
+  const parts: string[] = [];
+  if (hasEveryone) parts.push('@everyone');
+  parts.push(...roleIds.map((id) => `<@&${id}>`));
+
+  let content: string;
+  if (parts.length === 0) {
+    content = title;
+  } else if (parts.length === 1 && !/^#+ /g.test(title)) {
+    content = `${parts[0]} ${title}`;
+  } else {
+    content = `${parts.join(' ')}\n${title}`;
+  }
+
+  const allowedMentions: { roles: string[]; parse?: 'everyone'[] } = { roles: roleIds };
+  if (hasEveryone) allowedMentions.parse = ['everyone'];
+
+  return { content, allowedMentions };
+}
+
 function progressBar(ratio: number): string {
   const filled = Math.round(ratio * BAR_LENGTH);
   return BAR_FILLED.repeat(filled) + BAR_EMPTY.repeat(BAR_LENGTH - filled);
@@ -15,9 +57,7 @@ export function buildPollEmbed(
   showResults: boolean,
 ): EmbedBuilder {
   const totalVoters = new Set(votes.map((v) => v.user_id)).size;
-  const embed = new EmbedBuilder()
-    .setTitle(poll.title)
-    .setColor(poll.closed ? COLORS.CLOSED : COLORS.POLL);
+  const embed = new EmbedBuilder().setColor(poll.closed ? COLORS.CLOSED : COLORS.POLL);
 
   if (showResults) {
     const voteCounts = new Map<string, { count: number; users: string[] }>();
@@ -75,9 +115,7 @@ export function buildRankEmbed(
   showResults: boolean,
 ): EmbedBuilder {
   const totalVoters = new Set(votes.map((v) => v.user_id)).size;
-  const embed = new EmbedBuilder()
-    .setTitle(rank.title)
-    .setColor(rank.closed ? COLORS.CLOSED : COLORS.RANK);
+  const embed = new EmbedBuilder().setColor(rank.closed ? COLORS.CLOSED : COLORS.RANK);
 
   if (showResults && rank.mode === 'star') {
     const stats = new Map<number, { sum: number; count: number; users: string[] }>();

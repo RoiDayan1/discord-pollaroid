@@ -50,7 +50,7 @@ import {
   voteRankOrder,
   closeRank,
 } from '../db/ranks.js';
-import { buildRankEmbed } from '../util/embeds.js';
+import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
 import { buildRankRateComponents, buildRankOrderComponents } from '../util/components.js';
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
 
@@ -210,7 +210,11 @@ export async function handleRankStarVoteSubmit(interaction: ModalSubmitInteracti
     const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
     const components = buildRankRateComponents(rankId);
     try {
-      await session.rankInteraction.editReply({ embeds: [embed], components });
+      await session.rankInteraction.editReply({
+        ...buildMessageContent(rank.title, rank.mentions),
+        embeds: [embed],
+        components,
+      });
     } catch {
       // Token may have expired — embed will refresh on next interaction
     }
@@ -252,7 +256,11 @@ async function refreshRankMessage(
   const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
   const components = buildRankRateComponents(rankId);
   await interaction.deferUpdate();
-  await interaction.editReply({ embeds: [embed], components });
+  await interaction.editReply({
+    ...buildMessageContent(rank.title, rank.mentions),
+    embeds: [embed],
+    components,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +395,11 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
         const votes = getRankVotes(rankId);
         const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
         const components = buildRankOrderComponents(rankId);
-        await session.rankInteraction.editReply({ embeds: [embed], components });
+        await session.rankInteraction.editReply({
+          ...buildMessageContent(rank.title, rank.mentions),
+          embeds: [embed],
+          components,
+        });
       } catch {
         // Token may have expired — embed will refresh on next interaction
       }
@@ -486,7 +498,11 @@ export async function handleRankOrderClose(interaction: ButtonInteraction) {
       const votes = getRankVotes(rankId);
       const updatedRank = getRank(rankId)!;
       const embed = buildRankEmbed(updatedRank, options, votes, true);
-      await session.rankInteraction.editReply({ embeds: [embed], components: [] });
+      await session.rankInteraction.editReply({
+        ...buildMessageContent(updatedRank.title, updatedRank.mentions),
+        embeds: [embed],
+        components: [],
+      });
     } catch {
       // Token may have expired — embed will refresh on next interaction
     }

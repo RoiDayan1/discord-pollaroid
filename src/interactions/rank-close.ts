@@ -3,7 +3,7 @@
 import { type ButtonInteraction, MessageFlags } from 'discord.js';
 import { parseRankClose } from '../util/ids.js';
 import { getRank, getRankOptions, getRankVotes, closeRank } from '../db/ranks.js';
-import { buildRankEmbed } from '../util/embeds.js';
+import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
 import { rankCreatorSessions } from './rank-vote.js';
 
 export async function handleRankClose(interaction: ButtonInteraction) {
@@ -45,7 +45,11 @@ export async function handleRankClose(interaction: ButtonInteraction) {
     await interaction.update({ content: 'Ranking closed!', components: [] });
 
     try {
-      await session.rankInteraction.editReply({ embeds: [embed], components: [] });
+      await session.rankInteraction.editReply({
+        ...buildMessageContent(updatedRank.title, updatedRank.mentions),
+        embeds: [embed],
+        components: [],
+      });
     } catch {
       // Token may have expired — embed will refresh on next interaction
     }
@@ -53,6 +57,10 @@ export async function handleRankClose(interaction: ButtonInteraction) {
     rankCreatorSessions.delete(key);
   } else {
     // Fallback: update the message the button is on (e.g. direct close button on message)
-    await interaction.update({ embeds: [embed], components: [] });
+    await interaction.update({
+      ...buildMessageContent(updatedRank.title, updatedRank.mentions),
+      embeds: [embed],
+      components: [],
+    });
   }
 }

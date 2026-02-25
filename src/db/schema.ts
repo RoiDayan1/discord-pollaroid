@@ -68,6 +68,18 @@ export function initSchema(db: Database.Database) {
     db.exec(`ALTER TABLE ranks ADD COLUMN show_live INTEGER NOT NULL DEFAULT 0`);
   }
 
+  // Migration: polls — add mentions column
+  const pollCols = db.pragma('table_info(polls)') as { name: string }[];
+  if (!pollCols.some((c) => c.name === 'mentions')) {
+    db.exec(`ALTER TABLE polls ADD COLUMN mentions TEXT NOT NULL DEFAULT '[]'`);
+  }
+
+  // Migration: ranks — add mentions column
+  const rankCols2 = db.pragma('table_info(ranks)') as { name: string }[];
+  if (!rankCols2.some((c) => c.name === 'mentions')) {
+    db.exec(`ALTER TABLE ranks ADD COLUMN mentions TEXT NOT NULL DEFAULT '[]'`);
+  }
+
   // Migration: poll_votes option_idx → option_label
   const cols = db.pragma('table_info(poll_votes)') as { name: string }[];
   if (cols.some((c) => c.name === 'option_idx')) {

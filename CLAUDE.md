@@ -47,7 +47,7 @@ src/
 
   util/
     ids.ts              # nanoid generation + customId builders + regex patterns
-    embeds.ts           # Poll/rank result embed builders
+    embeds.ts           # Poll/rank result embed builders + buildMessageContent()
     components.ts       # ActionRow/button builders for poll/rank messages
     constants.ts        # Colors, labels, limits, star display
     modal.ts            # Modal data extraction (getRawModalComponents, getCheckboxValues)
@@ -74,15 +74,33 @@ src/
 - All vote operations use transactions
 - `message_id` is nullable (set after bot sends the message)
 - `poll_votes` keyed by `option_label` (not option_idx); `rank_votes` keyed by `option_idx`
-- Startup migrations handle schema evolution (e.g., adding `show_live` to ranks, poll_votes option_label migration)
+- `mentions` column (JSON array of role ID strings, default `'[]'`) on both polls and ranks — used for optional role pings in message content
+- Startup migrations handle schema evolution (e.g., adding `show_live` to ranks, poll_votes option_label migration, `mentions` to polls/ranks)
 
 ### Modal Components (New Discord API)
-- Label (type 18), CheckboxGroup (type 22), Checkbox (type 23), StringSelect (type 3)
+- Label (type 18), CheckboxGroup (type 22), Checkbox (type 23), StringSelect (type 3), RoleSelect (type 6)
 - No discord.js builder classes yet — use raw API payloads with `@ts-expect-error`
-- `util/modal.ts` provides helpers: `getRawModalComponents()`, `findModalComponent()`, `getCheckboxValues()`
+- `util/modal.ts` provides helpers: `getRawModalComponents()`, `findModalComponent()`, `getCheckboxValues()`, `getRoleSelectValues()`
 - discord.js transforms `custom_id` → `customId` (camelCase) on modal submit data
 - CheckboxGroup submit: `{ values: string[] }` — used for both single and multi choice
 - Single choice uses CheckboxGroup with `max_values: 1` (not RadioGroup)
+
+### Role Mentions
+- Both creation and edit modals include an optional RoleSelect (type 6) as the 5th component
+- Modal component IDs: `MODAL_POLL_MENTIONS`, `MODAL_RANK_MENTIONS`
+- Stored as JSON array in `mentions` column (e.g., `'["everyone","123456789"]'`)
+- `"everyone"` is a sentinel value in the array — not a real role ID
+- `@everyone` support: "Mention @everyone" checkbox in the Settings CheckboxGroup (since Discord's RoleSelect doesn't include @everyone)
+- `buildMessageContent(title, mentions)` in `util/embeds.ts` returns `{ content, allowedMentions }`:
+  - Parses the mentions JSON, separates `"everyone"` sentinel from real role IDs
+  - Formats `@everyone` and `<@&roleId>` mentions before the title
+  - 0 mentions → `title`
+  - 1 mention → `@everyone title` or `<@&id> title` (inline)
+  - 2+ mentions → `@everyone <@&id1> ...\ntitle` (title on new line)
+  - `allowedMentions.roles` contains real role IDs; `allowedMentions.parse` includes `'everyone'` when needed
+  - Spread the return value into reply/editReply: `{ ...buildMessageContent(title, mentions), embeds, components }`
+- Edit modals pre-fill RoleSelect with `default_values` (filtering out `"everyone"` sentinel) and pre-check the @everyone checkbox
+- Changing mentions does NOT clear votes
 
 ### Poll Voting Flow
 - **Non-creator**: Vote button opens a modal with CheckboxGroup directly
@@ -118,7 +136,7 @@ src/
 | ActionRows per message     | 5     | Vote/Rate uses single button row          |
 | Buttons per ActionRow      | 5     | —                                         |
 | customId length            | 100   | 8-char nanoid keeps IDs short             |
-| Modal top-level components | 5     | Poll creation modal uses 4                |
+| Modal top-level components | 5     | Both creation modals use all 5 slots      |
 | Interaction response time  | 3s    | SQLite is fast, but defer if needed       |
 
 ## Environment

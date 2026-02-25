@@ -57,6 +57,18 @@ export function getCheckboxValues(
 }
 
 /**
+ * Extracts selected role IDs from a RoleSelect component in modal submission data.
+ * Returns an empty array if the component is missing or has no selections.
+ */
+export function getRoleSelectValues(
+  components: APIModalSubmissionComponent[],
+  customId: string,
+): string[] {
+  const comp = findModalComponent(components, customId) as { values?: string[] } | undefined;
+  return comp?.values ?? [];
+}
+
+/**
  * Extracts the selected value from a RadioGroup component.
  * Returns null if the component is missing or nothing is selected.
  */
