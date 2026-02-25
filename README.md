@@ -1,6 +1,8 @@
-# Pollaroid
+# PollaRoiD
 
 A Discord bot for creating polls and rankings with live results, anonymous voting, role mentions, and more. Built with TypeScript, discord.js v14, and SQLite.
+
+[Invite PollaRoiD to your server](https://discord.com/oauth2/authorize?client_id=1475195199897600092&scope=bot+applications.commands&permissions=2147535872)
 
 ## Features
 

@@ -1,4 +1,4 @@
-# Pollaroid
+# PollaRoiD
 
 Discord bot for polls and rankings. TypeScript, discord.js v14, SQLite.
 
