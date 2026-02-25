@@ -33,7 +33,7 @@ import {
   MODAL_POLL_MENTIONS,
 } from '../util/ids.js';
 import { getCheckboxValues, getRoleSelectValues, getRawModalComponents } from '../util/modal.js';
-import { parseOptions, validatePollOptions } from '../util/validation.js';
+import { parseOptionsWithTargets, validatePollOptions } from '../util/validation.js';
 
 const POLL_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
   title: 'Create a Poll',
@@ -53,12 +53,12 @@ const POLL_MODAL_PAYLOAD: APIModalInteractionResponseCallbackData = {
     {
       type: ComponentType.Label as const,
       label: 'Options',
-      description: 'One option per line (minimum 1)',
+      description: 'One per line. Add /N for a vote target',
       component: {
         type: ComponentType.TextInput as const,
         custom_id: MODAL_POLL_OPTIONS,
         style: TextInputStyle.Paragraph,
-        placeholder: 'Valorant\nCS2\nOverwatch',
+        placeholder: 'Valorant /5\nCS2 /3\nOverwatch',
         required: true,
       },
     },
@@ -143,7 +143,7 @@ export async function handlePollModalSubmit(interaction: ModalSubmitInteraction)
   const mentions = JSON.stringify(mentionRoleIds);
 
   // Parse and validate options
-  const options = parseOptions(optionsRaw);
+  const options = parseOptionsWithTargets(optionsRaw);
   const error = validatePollOptions(options);
   if (error) {
     await interaction.reply({ content: error, flags: MessageFlags.Ephemeral });

@@ -80,6 +80,12 @@ export function initSchema(db: Database.Database) {
     db.exec(`ALTER TABLE ranks ADD COLUMN mentions TEXT NOT NULL DEFAULT '[]'`);
   }
 
+  // Migration: poll_options — add target column
+  const pollOptionCols = db.pragma('table_info(poll_options)') as { name: string }[];
+  if (!pollOptionCols.some((c) => c.name === 'target')) {
+    db.exec(`ALTER TABLE poll_options ADD COLUMN target INTEGER DEFAULT NULL`);
+  }
+
   // Migration: poll_votes option_idx → option_label
   const cols = db.pragma('table_info(poll_votes)') as { name: string }[];
   if (cols.some((c) => c.name === 'option_idx')) {

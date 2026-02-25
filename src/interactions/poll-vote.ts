@@ -29,6 +29,7 @@ import {
   clearPollVotes,
   getPoll,
   getPollOptions,
+  getPollVoteCounts,
   getPollVotes,
   getUserPollVotes,
   votePollMulti,
@@ -109,8 +110,25 @@ async function showVoteModal(
   const options = getPollOptions(pollId);
   const userVotes = getUserPollVotes(pollId, interaction.user.id);
   const votedLabels = new Set(userVotes.map((v) => v.option_label));
+  const voteCounts = getPollVoteCounts(pollId);
 
-  const modalOptions = options.map((opt) => ({
+  // Filter: include option if no target, not full, or user already voted for it
+  const availableOptions = options.filter((opt) => {
+    if (opt.target === null) return true;
+    const count = voteCounts.get(opt.label) ?? 0;
+    if (count < opt.target) return true;
+    return votedLabels.has(opt.label);
+  });
+
+  if (availableOptions.length === 0) {
+    await interaction.reply({
+      content: 'All options have reached their targets. No slots available.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const modalOptions = availableOptions.map((opt) => ({
     label: `${opt.label}`.slice(0, 100),
     value: opt.label,
     default: votedLabels.has(opt.label),
@@ -127,7 +145,7 @@ async function showVoteModal(
         custom_id: MODAL_POLL_VOTE_CHOICE,
         min_values: 0,
         required: false,
-        max_values: isSingle ? 1 : options.length,
+        max_values: isSingle ? 1 : availableOptions.length,
         options: modalOptions,
       },
     },
@@ -226,6 +244,32 @@ export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteract
   const rawComponents = getRawModalComponents(interaction);
   const options = getPollOptions(pollId);
   const voteLabels = getCheckboxValues(rawComponents, MODAL_POLL_VOTE_CHOICE);
+
+  // Server-side enforcement: reject new votes for filled options
+  if (voteLabels.length > 0) {
+    const voteCounts = getPollVoteCounts(pollId);
+    const prevVotes = getUserPollVotes(pollId, interaction.user.id);
+    const prevLabels = new Set(prevVotes.map((v) => v.option_label));
+
+    const blockedLabels: string[] = [];
+    for (const label of voteLabels) {
+      const opt = options.find((o) => o.label === label);
+      if (opt?.target !== null && opt?.target !== undefined) {
+        const count = voteCounts.get(label) ?? 0;
+        if (count >= opt.target && !prevLabels.has(label)) {
+          blockedLabels.push(label);
+        }
+      }
+    }
+
+    if (blockedLabels.length > 0) {
+      await interaction.reply({
+        content: `These options are full and cannot accept new votes: **${blockedLabels.join(', ')}**. Please try again.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+  }
 
   recordVote(poll, pollId, interaction.user.id, voteLabels);
 

@@ -31,7 +31,7 @@ import {
   POLL_EDIT_MODAL_PREFIX,
 } from '../util/ids.js';
 import { getCheckboxValues, getRawModalComponents, getRoleSelectValues } from '../util/modal.js';
-import { parseOptions, validatePollOptions } from '../util/validation.js';
+import { parseOptionsWithTargets, validatePollOptions } from '../util/validation.js';
 import { pollCreatorSessions } from './poll-vote.js';
 
 /** Handles the "Open Edit Modal" button click — shows a pre-filled edit modal. */
@@ -56,7 +56,9 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
 
   // Pre-fill modal with current poll values
   const options = getPollOptions(pollId);
-  const optionText = options.map((o) => o.label).join('\n');
+  const optionText = options
+    .map((o) => (o.target !== null ? `${o.label} /${o.target}` : o.label))
+    .join('\n');
   const currentMentions: string[] = JSON.parse(poll.mentions);
   const hasEveryone = currentMentions.includes(EVERYONE_SENTINEL);
   const roleOnlyMentions = currentMentions.filter((id) => id !== EVERYONE_SENTINEL);
@@ -76,7 +78,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
     {
       type: ComponentType.Label,
       label: 'Options',
-      description: 'One option per line (minimum 1)',
+      description: 'One per line. Add /N for a vote target',
       component: {
         type: ComponentType.TextInput,
         custom_id: MODAL_POLL_OPTIONS,
@@ -190,7 +192,7 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
   const mentions = JSON.stringify(mentionRoleIds);
 
   // Validate options
-  const options = parseOptions(optionsRaw);
+  const options = parseOptionsWithTargets(optionsRaw);
   const error = validatePollOptions(options);
   if (error) {
     await interaction.reply({ content: error, flags: MessageFlags.Ephemeral });

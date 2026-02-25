@@ -29,6 +29,18 @@ export const BAR_FILLED = '▰';
 export const BAR_EMPTY = '▱';
 export const BAR_LENGTH = 15;
 
+export const TARGET_EMPTY = '\u25CB'; // ○
+export const TARGET_PARTIAL = '\u25D0'; // ◐
+export const TARGET_FILLED = '\u25CF'; // ●
+
+/** Returns the target icon for an option, or empty string if no target. */
+export function targetIcon(target: number | null, count: number): string {
+  if (target === null) return '';
+  if (count >= target) return TARGET_FILLED;
+  if (count > 0) return TARGET_PARTIAL;
+  return TARGET_EMPTY;
+}
+
 export const STAR_EMOJI = '⭐';
 export const HALF_STAR_EMOJI = '⭒';
 

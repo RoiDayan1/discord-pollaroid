@@ -1,4 +1,5 @@
 import { PollMode } from '../util/constants.js';
+import type { ParsedOption } from '../util/validation.js';
 import db from './connection.js';
 
 export interface Poll {
@@ -21,6 +22,7 @@ export interface PollOption {
   poll_id: string;
   idx: number;
   label: string;
+  target: number | null;
 }
 
 export interface PollVote {
@@ -30,19 +32,19 @@ export interface PollVote {
   voted_at: string;
 }
 
-export function createPoll(poll: Omit<Poll, 'message_id' | 'created_at'>, options: string[]) {
+export function createPoll(poll: Omit<Poll, 'message_id' | 'created_at'>, options: ParsedOption[]) {
   const insertPoll = db.prepare(`
     INSERT INTO polls (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, mentions, closed)
     VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @mentions, @closed)
   `);
   const insertOption = db.prepare(`
-    INSERT INTO poll_options (poll_id, idx, label) VALUES (?, ?, ?)
+    INSERT INTO poll_options (poll_id, idx, label, target) VALUES (?, ?, ?, ?)
   `);
 
   const tx = db.transaction(() => {
     insertPoll.run(poll);
     for (let i = 0; i < options.length; i++) {
-      insertOption.run(poll.id, i, options[i]);
+      insertOption.run(poll.id, i, options[i].label, options[i].target);
     }
   });
   tx();
@@ -115,7 +117,7 @@ export function updatePoll(
     anonymous: number;
     show_live: number;
     mentions: string;
-    options: string[];
+    options: ParsedOption[];
   },
 ): boolean {
   let votesCleared = false;
@@ -136,7 +138,7 @@ export function updatePoll(
 
     const currentOptions = getPollOptions(pollId);
     const oldLabels = new Set(currentOptions.map((o) => o.label));
-    const newLabels = new Set(updates.options);
+    const newLabels = new Set(updates.options.map((o) => o.label));
     const optionsChanged =
       oldLabels.size !== newLabels.size || [...oldLabels].some((l) => !newLabels.has(l));
     const modeChanged = currentPoll.mode !== updates.mode;
@@ -160,15 +162,36 @@ export function updatePoll(
     if (optionsChanged) {
       db.prepare('DELETE FROM poll_options WHERE poll_id = ?').run(pollId);
       const insertOption = db.prepare(
-        'INSERT INTO poll_options (poll_id, idx, label) VALUES (?, ?, ?)',
+        'INSERT INTO poll_options (poll_id, idx, label, target) VALUES (?, ?, ?, ?)',
       );
       for (let i = 0; i < updates.options.length; i++) {
-        insertOption.run(pollId, i, updates.options[i]);
+        insertOption.run(pollId, i, updates.options[i].label, updates.options[i].target);
+      }
+    } else {
+      // Labels unchanged — update targets in-place without clearing votes
+      const updateTarget = db.prepare(
+        'UPDATE poll_options SET target = ? WHERE poll_id = ? AND label = ?',
+      );
+      for (const opt of updates.options) {
+        updateTarget.run(opt.target, pollId, opt.label);
       }
     }
   });
   tx();
   return votesCleared;
+}
+
+export function getPollVoteCounts(pollId: string): Map<string, number> {
+  const rows = db
+    .prepare(
+      'SELECT option_label, COUNT(*) as count FROM poll_votes WHERE poll_id = ? GROUP BY option_label',
+    )
+    .all(pollId) as { option_label: string; count: number }[];
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    map.set(row.option_label, row.count);
+  }
+  return map;
 }
 
 export function closePoll(pollId: string) {

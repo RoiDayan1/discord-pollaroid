@@ -12,6 +12,7 @@ import {
   PollMode,
   RankMode,
   starsDisplay,
+  targetIcon,
 } from './constants.js';
 
 /**
@@ -56,11 +57,12 @@ export function buildMessageContent(
   return { content, allowedMentions };
 }
 
-/** Renders a visual progress bar from a 0–1 ratio, e.g. `╴▰▰▰▰▱▱▱▱▱▱` */
-function progressBar(ratio: number): string {
-  const filled = Math.round(ratio * BAR_LENGTH);
-  const bar = BAR_FILLED.repeat(filled) + BAR_EMPTY.repeat(BAR_LENGTH - filled);
-  return `${BAR_PREFIX}${bar}`;
+/** Renders a visual progress bar from a 0–1 ratio, e.g. `╴▰▰▰▰▱▱▱▱▱▱` or `╴● ▰▰▰▰▱▱▱▱` */
+function progressBar(ratio: number, icon = ''): string {
+  const barLength = icon ? BAR_LENGTH - 1 : BAR_LENGTH;
+  const filled = Math.round(ratio * barLength);
+  const bar = BAR_FILLED.repeat(filled) + BAR_EMPTY.repeat(barLength - filled);
+  return icon ? `${BAR_PREFIX}${icon} ${bar}` : `${BAR_PREFIX}${bar}`;
 }
 
 /**
@@ -94,12 +96,28 @@ export function buildPollEmbed(
       }
     }
 
+    // Voter count excluding users who only voted for targeted options
+    const targetedLabels = new Set(options.filter((o) => o.target !== null).map((o) => o.label));
+    const globalVoters = new Set(
+      votes.filter((v) => !targetedLabels.has(v.option_label)).map((v) => v.user_id),
+    ).size;
+
     // Build each option line: label, progress bar, vote count, and optional voter mentions
     const lines = options.map((opt) => {
       const entry = voteCounts.get(opt.label)!;
-      const pct = totalVoters > 0 ? entry.count / totalVoters : 0;
-      const bar = progressBar(pct);
-      let line = `**${opt.label}**\n${bar}${EMPTY_SPACE}${EMPTY_SPACE}**${entry.count}** vote${entry.count !== 1 ? 's' : ''}`;
+      const icon = targetIcon(opt.target, entry.count);
+      const pct =
+        opt.target !== null
+          ? Math.min(entry.count / opt.target, 1)
+          : globalVoters > 0
+            ? entry.count / globalVoters
+            : 0;
+      const bar = progressBar(pct, icon);
+      const countStr =
+        opt.target !== null
+          ? `**${entry.count}/${opt.target}** vote${entry.count !== 1 ? 's' : ''}`
+          : `**${entry.count}** vote${entry.count !== 1 ? 's' : ''}`;
+      let line = `**${opt.label}**\n${bar}${EMPTY_SPACE}${EMPTY_SPACE}${countStr}`;
       // Public polls: show all voter mentions
       if (!poll.anonymous && entry.users.length > 0) {
         const userMentions = entry.users.map((id) => `<@${id}>`).join(', ');
@@ -110,8 +128,11 @@ export function buildPollEmbed(
 
     embed.setDescription(lines.join('\n\n'));
   } else {
-    // Hidden results — just show option labels
-    const lines = options.map((opt) => `**${opt.label}**`);
+    // Hidden results — show option labels with optional target info
+    const lines = options.map((opt) => {
+      const targetSuffix = opt.target !== null ? ` (target: ${opt.target})` : '';
+      return `**${opt.label}**${targetSuffix}`;
+    });
     embed.setDescription(lines.join('\n'));
   }
 

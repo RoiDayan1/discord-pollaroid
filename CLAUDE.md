@@ -49,10 +49,10 @@ src/
     ids.ts              # nanoid generation + customId builders + regex patterns
     embeds.ts           # Poll/rank result embed builders + buildMessageContent()
     components.ts       # ActionRow/button builders for poll/rank messages
-    constants.ts        # Enums (PollMode, RankMode, Setting), EVERYONE_SENTINEL, colors, star display
+    constants.ts        # Enums (PollMode, RankMode, Setting), EVERYONE_SENTINEL, colors, star display, target icons
     modal.ts            # Modal data extraction (getRawModalComponents, getCheckboxValues)
     errors.ts           # safeErrorReply helper
-    validation.ts       # parseOptions, validatePollOptions, validateRankOptions (mode-aware)
+    validation.ts       # parseOptions, parseOptionsWithTargets, validatePollOptions, validateRankOptions
 ```
 
 ## Architecture
@@ -72,6 +72,8 @@ src/
 - `RankMode`: `Star = 'star'`, `Order = 'order'`
 - `Setting`: `Anonymous = 'anonymous'`, `ShowLive = 'show_live'`, `MentionEveryone = 'mention_everyone'`
 - `EVERYONE_SENTINEL = 'everyone'` — sentinel value in the mentions JSON array for @everyone
+- `TARGET_EMPTY = '○'`, `TARGET_PARTIAL = '◐'`, `TARGET_FILLED = '●'` — icons for option vote targets
+- `targetIcon(target, count)` — returns the appropriate icon or `''` if no target
 - Always use these enums instead of raw string literals for modes and settings
 
 ### Database
@@ -80,9 +82,10 @@ src/
 - IDs are 8-char nanoids (not Discord snowflakes) to fit customId limit
 - All vote operations use transactions
 - `message_id` is nullable (set after bot sends the message)
+- `poll_options` has optional `target` column (nullable integer) for per-option vote targets
 - `poll_votes` keyed by `option_label` (not option_idx); `rank_votes` keyed by `option_idx`
 - `mentions` column (JSON array of role ID strings, default `'[]'`) on both polls and ranks — used for optional role pings in message content
-- Startup migrations handle schema evolution (e.g., adding `show_live` to ranks, poll_votes option_label migration, `mentions` to polls/ranks)
+- Startup migrations handle schema evolution (e.g., adding `show_live` to ranks, poll_votes option_label migration, `mentions` to polls/ranks, `target` to poll_options)
 
 ### Modal Components (New Discord API)
 - Label (type 18), CheckboxGroup (type 22), Checkbox (type 23), StringSelect (type 3), RoleSelect (type 6)
@@ -108,6 +111,17 @@ src/
   - Spread the return value into reply/editReply: `{ ...buildMessageContent(title, mentions), embeds, components }`
 - Edit modals pre-fill RoleSelect with `default_values` (filtering out `"everyone"` sentinel) and pre-check the @everyone checkbox
 - Changing mentions does NOT clear votes
+
+### Poll Option Targets
+- Each poll option can optionally have a vote target (e.g., 5)
+- Input syntax: append ` /N` to an option line (e.g., `Valorant /5`); parsed by `parseOptionsWithTargets()`
+- `ParsedOption` interface: `{ label: string; target: number | null }`
+- Stored in `poll_options.target` column (nullable integer)
+- Embed display: icon appears inline before the progress bar; progress bar ratio = `count/target`; vote count shown as `N/T votes`
+- Icons: `○` (empty, 0 votes), `◐` (partial, some votes), `●` (filled, target reached)
+- Filled options are excluded from the voting CheckboxGroup (unless user already voted for them)
+- Server-side enforcement rejects new votes for filled options (race condition protection)
+- Editing targets without changing labels preserves existing votes
 
 ### Poll Voting Flow
 - **Non-creator**: Vote button opens a modal with CheckboxGroup directly
