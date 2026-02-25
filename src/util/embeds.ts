@@ -100,14 +100,10 @@ export function buildPollEmbed(
       const pct = totalVoters > 0 ? entry.count / totalVoters : 0;
       const bar = progressBar(pct);
       let line = `**${opt.label}**\n${bar}${EMPTY_SPACE}${EMPTY_SPACE}**${entry.count}** vote${entry.count !== 1 ? 's' : ''}`;
-      // Public polls: show up to 5 voter mentions, with a "+N more" overflow
+      // Public polls: show all voter mentions
       if (!poll.anonymous && entry.users.length > 0) {
-        const userMentions = entry.users
-          .slice(0, 5)
-          .map((id) => `<@${id}>`)
-          .join(', ');
-        const extra = entry.users.length > 5 ? ` +${entry.users.length - 5} more` : '';
-        line += `\n${userMentions}${extra}`;
+        const userMentions = entry.users.map((id) => `<@${id}>`).join(', ');
+        line += `\n${userMentions}`;
       }
       return line;
     });
@@ -174,14 +170,10 @@ export function buildRankEmbed(
       const avgStr = entry.count > 0 ? avg.toFixed(1) : '—';
       const stars = entry.count > 0 ? starsDisplay(avg) : '';
       let line = `**${opt.label}**\n${stars} **${avgStr}** avg (${entry.count} rating${entry.count !== 1 ? 's' : ''})`;
-      // Public ranks: show up to 5 voter mentions, with a "+N more" overflow
+      // Public ranks: show all voter mentions
       if (!rank.anonymous && entry.users.length > 0) {
-        const userMentions = entry.users
-          .slice(0, 5)
-          .map((id) => `<@${id}>`)
-          .join(', ');
-        const extra = entry.users.length > 5 ? ` +${entry.users.length - 5} more` : '';
-        line += `\n${userMentions}${extra}`;
+        const userMentions = entry.users.map((id) => `<@${id}>`).join(', ');
+        line += `\n${userMentions}`;
       }
       return line;
     });
