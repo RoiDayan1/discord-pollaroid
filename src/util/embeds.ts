@@ -6,6 +6,7 @@ import {
   BAR_FILLED,
   BAR_LENGTH,
   COLORS,
+  EMPTY_SPACE,
   EVERYONE_SENTINEL,
   PollMode,
   RankMode,
@@ -56,7 +57,8 @@ export function buildMessageContent(
 
 function progressBar(ratio: number): string {
   const filled = Math.round(ratio * BAR_LENGTH);
-  return BAR_FILLED.repeat(filled) + BAR_EMPTY.repeat(BAR_LENGTH - filled);
+  const bar = BAR_FILLED.repeat(filled) + BAR_EMPTY.repeat(BAR_LENGTH - filled);
+  return `╴${bar}`;
 }
 
 export function buildPollEmbed(
@@ -86,7 +88,7 @@ export function buildPollEmbed(
       const pct = totalVoters > 0 ? entry.count / totalVoters : 0;
       // const pctStr = `${Math.round(pct * 100)}%`;
       const bar = progressBar(pct);
-      let line = `**${opt.label}**\n${bar}   **${entry.count}** vote${entry.count !== 1 ? 's' : ''}`;
+      let line = `**${opt.label}**\n${bar}${EMPTY_SPACE}${EMPTY_SPACE}**${entry.count}** vote${entry.count !== 1 ? 's' : ''}`;
       if (!poll.anonymous && entry.users.length > 0) {
         const userMentions = entry.users
           .slice(0, 5)

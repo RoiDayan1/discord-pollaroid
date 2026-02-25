@@ -22,9 +22,11 @@ export const COLORS = {
   CLOSED: 0x99aab5, // Grey
 } as const;
 
-export const BAR_FILLED = '❙';
-export const BAR_EMPTY = '⁝';
-export const BAR_LENGTH = 30;
+export const EMPTY_SPACE = '\u2800';
+
+export const BAR_FILLED = '▰';
+export const BAR_EMPTY = '▱';
+export const BAR_LENGTH = 15;
 
 export const STAR_EMOJI = '⭐';
 export const HALF_STAR_EMOJI = '⭒';
