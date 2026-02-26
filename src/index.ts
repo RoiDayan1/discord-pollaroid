@@ -22,8 +22,9 @@ import {
   RANK_STAR_VOTE_MODAL_PREFIX,
 } from './util/ids.js';
 
-// Importing connection initializes the DB and runs schema
-import './db/connection.js';
+import { initDb } from './db/connection.js';
+
+await initDb();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 

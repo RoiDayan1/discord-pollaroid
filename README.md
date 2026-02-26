@@ -1,6 +1,6 @@
 # PollaRoiD
 
-A Discord bot for creating polls and rankings with live results, anonymous voting, role mentions, and more. Built with TypeScript, discord.js v14, and SQLite.
+A Discord bot for creating polls and rankings with live results, anonymous voting, role mentions, and more. Built with TypeScript, discord.js v14, and Knex.js (SQLite + PostgreSQL).
 
 [Invite PollaRoiD to your server](https://discord.com/oauth2/authorize?client_id=1475195199897600092&scope=bot+applications.commands&permissions=2147535872)
 
@@ -28,7 +28,7 @@ A Discord bot for creating polls and rankings with live results, anonymous votin
 - Previous votes are pre-selected so users can update their choices
 - Filled vote targets are automatically excluded from the voting form
 - Embeds show a visual progress bar for each option
-- All data stored locally in a SQLite database — no external services required
+- Supports both SQLite (local dev) and PostgreSQL (production) — no external services required for local use
 
 ## Setup
 
@@ -60,9 +60,10 @@ yarn install
 # Configure environment
 cp .env.example .env
 # Edit .env and fill in your values:
-#   BOT_TOKEN    — your bot token from the Developer Portal
-#   CLIENT_ID    — your application's Client ID (from General Information)
-#   GUILD_ID     — your Discord server ID (right-click server → Copy Server ID)
+#   BOT_TOKEN      — your bot token from the Developer Portal
+#   CLIENT_ID      — your application's Client ID (from General Information)
+#   GUILD_ID       — your Discord server ID (right-click server → Copy Server ID)
+#   DATABASE_URL   — (optional) PostgreSQL connection string; omit for local SQLite
 
 # Register slash commands with Discord
 yarn deploy-commands
@@ -71,7 +72,7 @@ yarn deploy-commands
 yarn dev
 ```
 
-The bot creates a `pollaroid.db` SQLite database file in the project root on first run.
+Without `DATABASE_URL`, the bot creates a `pollaroid.db` SQLite file in the project root. With `DATABASE_URL` set to a PostgreSQL connection string, it uses PostgreSQL instead.
 
 ## Usage
 
@@ -146,11 +147,11 @@ src/
     rank-close.ts       # Close ranking
     rank-edit.ts        # Edit ranking
 
-  db/                   # SQLite database layer
-    connection.ts       # DB instance setup
-    schema.ts           # Table creation + migrations
-    polls.ts            # Poll CRUD + vote operations
-    ranks.ts            # Rank CRUD + vote operations
+  db/                   # Knex.js database layer (SQLite or PostgreSQL)
+    connection.ts       # Knex instance factory + initDb()
+    schema.ts           # Schema creation + migrations (idempotent)
+    polls.ts            # Poll CRUD + vote operations (async)
+    ranks.ts            # Rank CRUD + vote operations (async)
 
   util/                 # Shared utilities
     ids.ts              # ID generation + customId patterns
@@ -158,6 +159,7 @@ src/
     components.ts       # Button/action row builders
     constants.ts        # Enums, colors, display constants
     modal.ts            # Modal data extraction helpers
+    messages.ts         # Bot message editing via REST API
     errors.ts           # Error reply helper
     validation.ts       # Option parsing + validation
 ```
@@ -167,7 +169,7 @@ src/
 - **Runtime:** Node.js with ESM
 - **Language:** TypeScript (strict mode, ES2022 target)
 - **Discord library:** discord.js v14
-- **Database:** SQLite via better-sqlite3 (WAL mode, synchronous)
+- **Database:** Knex.js — SQLite (via better-sqlite3) for local dev, PostgreSQL (via pg) for production
 - **Linting:** ESLint + typescript-eslint
 - **Formatting:** Prettier (single quotes, trailing commas, 100 char width)
 
@@ -176,8 +178,19 @@ src/
 - Interaction routing uses customId regex matching — IDs follow the pattern `<type>:<nanoid>:<action>`
 - 8-character nanoid IDs keep customIds well within Discord's 100-char limit
 - All vote operations use database transactions for consistency
+- All DB functions are async — Knex abstracts dialect differences between SQLite and PostgreSQL
 - Modal components use raw API payloads since discord.js doesn't have builder classes for newer component types (CheckboxGroup, Label, etc.) yet
 - Schema migrations run automatically on startup
+
+## Deployment
+
+The bot can be deployed to any Node.js hosting platform. A [Render.com](https://render.com) blueprint (`render.yaml`) is included for one-click setup with a web service and PostgreSQL database.
+
+To deploy manually:
+1. Provision a PostgreSQL database
+2. Set `DATABASE_URL` to the connection string
+3. Run `yarn install && yarn build && yarn deploy-commands`
+4. Start with `yarn start`
 
 ## License
 

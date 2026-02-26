@@ -1,10 +1,11 @@
 # PollaRoiD
 
-Discord bot for polls and rankings. TypeScript, discord.js v14, SQLite.
+Discord bot for polls and rankings. TypeScript, discord.js v14, Knex.js (SQLite + PostgreSQL).
 
 ## Instructions
 
 When planning changes that add, remove, or change functionality, include a final step to update this CLAUDE.md file to reflect those changes. Skip this for small fixes that don't affect documented behavior or structure.
+Also update the README.md file if relevant.
 
 ## Quick Reference
 
@@ -22,7 +23,7 @@ yarn format            # Auto-fix formatting
 ```
 src/
   index.ts              # Entry point, event routing
-  config.ts             # Env config (BOT_TOKEN, CLIENT_ID, GUILD_ID)
+  config.ts             # Env config (BOT_TOKEN, CLIENT_ID, GUILD_ID, DATABASE_URL)
   deploy-commands.ts    # One-shot script to register slash commands
 
   commands/             # Slash command definitions + execute handlers
@@ -39,11 +40,11 @@ src/
     rank-close.ts       # Close rank (creator only, from star mode ephemeral)
     rank-edit.ts        # Edit rank (creator only, pre-filled modal)
 
-  db/                   # SQLite via better-sqlite3 (synchronous)
-    connection.ts       # DB instance (WAL mode, foreign keys ON)
-    schema.ts           # CREATE TABLE statements (idempotent) + migrations
-    polls.ts            # Poll CRUD + vote operations
-    ranks.ts            # Rank CRUD + vote operations
+  db/                   # Knex.js — SQLite (local) or PostgreSQL (production), all async
+    connection.ts       # Knex instance factory + initDb() (WAL mode, foreign keys ON for SQLite)
+    schema.ts           # Knex schema builder (idempotent) + legacy migrations
+    polls.ts            # Poll CRUD + vote operations (all async)
+    ranks.ts            # Rank CRUD + vote operations (all async)
 
   util/
     ids.ts              # nanoid generation + customId builders + regex patterns
@@ -78,10 +79,13 @@ src/
 - Always use these enums instead of raw string literals for modes and settings
 
 ### Database
-- SQLite file: `pollaroid.db` (project root)
+- **Dual database support via Knex.js**: if `DATABASE_URL` env var is set → PostgreSQL; otherwise → SQLite (`pollaroid.db` in project root)
+- All DB functions are **async** (return Promises); all callers use `await`
+- `connection.ts` exports `db` (Knex instance), `initDb()` (async schema init), and `isPostgres` flag
+- `initDb()` must be called at startup (top-level `await` in `index.ts`) before the Discord client logs in
 - 6 tables: polls, poll_options, poll_votes, ranks, rank_options, rank_votes
 - IDs are 8-char nanoids (not Discord snowflakes) to fit customId limit
-- All vote operations use transactions
+- All vote operations use Knex transactions (`db.transaction(async (trx) => { ... })`)
 - `message_id` is nullable (set after bot sends the message)
 - `poll_options` has optional `target` column (nullable integer) for per-option vote targets
 - `poll_votes` keyed by `option_label` (not option_idx); `rank_votes` keyed by `option_idx`
@@ -173,10 +177,17 @@ src/
 | Buttons per ActionRow      | 5     | —                                         |
 | customId length            | 100   | 8-char nanoid keeps IDs short             |
 | Modal top-level components | 5     | Both creation modals use all 5 slots      |
-| Interaction response time  | 3s    | SQLite is fast, but defer if needed       |
+| Interaction response time  | 3s    | DB queries are fast, but defer if needed  |
 | Min poll options           | 1     | Single option polls are allowed            |
 | Min rank options (star)    | 1     | Single option star rankings are allowed    |
 | Min rank options (order)   | 2     | Ordering requires at least 2 options       |
+
+## Deployment
+
+- **Render.com**: `render.yaml` blueprint defines a Node web service + PostgreSQL database
+- `DATABASE_URL` is auto-linked from the Render PostgreSQL instance
+- Build command: `yarn install && yarn build && yarn deploy-commands`
+- Start command: `yarn start`
 
 ## Environment
 
@@ -185,6 +196,7 @@ Requires `.env` file (see `.env.example`):
 BOT_TOKEN=...
 CLIENT_ID=...
 GUILD_ID=...
+# DATABASE_URL=postgres://...  (optional — omit for local SQLite)
 ```
 
 ## Code Style

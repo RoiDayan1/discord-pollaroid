@@ -40,7 +40,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { pollId } = parsed;
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
 
   if (!poll || poll.closed) {
     await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
@@ -55,7 +55,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
   }
 
   // Pre-fill modal with current poll values
-  const options = getPollOptions(pollId);
+  const options = await getPollOptions(pollId);
   const optionText = options
     .map((o) => (o.target !== null ? `${o.label} /${o.target}` : o.label))
     .join('\n');
@@ -162,7 +162,7 @@ export async function handlePollEditButton(interaction: ButtonInteraction) {
 /** Handles the edit modal submission — validates, updates DB, sends confirmation. */
 export async function handlePollEditModalSubmit(interaction: ModalSubmitInteraction) {
   const pollId = interaction.customId.slice(POLL_EDIT_MODAL_PREFIX.length);
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
 
   if (!poll || poll.closed) {
     await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
@@ -200,7 +200,7 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
   }
 
   // Update DB — may clear votes if options/mode changed
-  const votesCleared = updatePoll(pollId, {
+  const votesCleared = await updatePoll(pollId, {
     title,
     mode,
     anonymous: anonymous ? 1 : 0,
@@ -217,9 +217,9 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
   await interaction.reply({ content, flags: MessageFlags.Ephemeral });
 
   // Refresh the poll message via channel editing
-  const updatedPoll = getPoll(pollId)!;
-  const updatedOptions = getPollOptions(pollId);
-  const votes = getPollVotes(pollId);
+  const updatedPoll = (await getPoll(pollId))!;
+  const updatedOptions = await getPollOptions(pollId);
+  const votes = await getPollVotes(pollId);
   const embed = buildPollEmbed(updatedPoll, updatedOptions, votes, !!updatedPoll.show_live);
   const components = buildPollComponents(pollId);
 

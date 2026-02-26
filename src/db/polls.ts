@@ -32,84 +32,76 @@ export interface PollVote {
   voted_at: string;
 }
 
-export function createPoll(poll: Omit<Poll, 'message_id' | 'created_at'>, options: ParsedOption[]) {
-  const insertPoll = db.prepare(`
-    INSERT INTO polls (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, mentions, closed)
-    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @mentions, @closed)
-  `);
-  const insertOption = db.prepare(`
-    INSERT INTO poll_options (poll_id, idx, label, target) VALUES (?, ?, ?, ?)
-  `);
-
-  const tx = db.transaction(() => {
-    insertPoll.run(poll);
+export async function createPoll(
+  poll: Omit<Poll, 'message_id' | 'created_at'>,
+  options: ParsedOption[],
+) {
+  await db.transaction(async (trx) => {
+    await trx('polls').insert(poll);
     for (let i = 0; i < options.length; i++) {
-      insertOption.run(poll.id, i, options[i].label, options[i].target);
+      await trx('poll_options').insert({
+        poll_id: poll.id,
+        idx: i,
+        label: options[i].label,
+        target: options[i].target,
+      });
     }
   });
-  tx();
 }
 
-export function setPollMessageId(pollId: string, messageId: string) {
-  db.prepare('UPDATE polls SET message_id = ? WHERE id = ?').run(messageId, pollId);
+export async function setPollMessageId(pollId: string, messageId: string) {
+  await db('polls').where('id', pollId).update({ message_id: messageId });
 }
 
-export function getPoll(pollId: string): Poll | undefined {
-  return db.prepare('SELECT * FROM polls WHERE id = ?').get(pollId) as Poll | undefined;
+export async function getPoll(pollId: string): Promise<Poll | undefined> {
+  return db<Poll>('polls').where('id', pollId).first();
 }
 
-export function getPollOptions(pollId: string): PollOption[] {
-  return db
-    .prepare('SELECT * FROM poll_options WHERE poll_id = ? ORDER BY idx')
-    .all(pollId) as PollOption[];
+export async function getPollOptions(pollId: string): Promise<PollOption[]> {
+  return db<PollOption>('poll_options').where('poll_id', pollId).orderBy('idx');
 }
 
-export function getPollVotes(pollId: string): PollVote[] {
-  return db.prepare('SELECT * FROM poll_votes WHERE poll_id = ?').all(pollId) as PollVote[];
+export async function getPollVotes(pollId: string): Promise<PollVote[]> {
+  return db<PollVote>('poll_votes').where('poll_id', pollId);
 }
 
-export function getUserPollVotes(pollId: string, userId: string): PollVote[] {
-  return db
-    .prepare('SELECT * FROM poll_votes WHERE poll_id = ? AND user_id = ?')
-    .all(pollId, userId) as PollVote[];
+export async function getUserPollVotes(pollId: string, userId: string): Promise<PollVote[]> {
+  return db<PollVote>('poll_votes').where({ poll_id: pollId, user_id: userId });
 }
 
-export function votePollSingle(pollId: string, optionLabel: string, userId: string) {
-  const tx = db.transaction(() => {
-    db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?').run(pollId, userId);
-    db.prepare('INSERT INTO poll_votes (poll_id, option_label, user_id) VALUES (?, ?, ?)').run(
-      pollId,
-      optionLabel,
-      userId,
-    );
+export async function votePollSingle(pollId: string, optionLabel: string, userId: string) {
+  await db.transaction(async (trx) => {
+    await trx('poll_votes').where({ poll_id: pollId, user_id: userId }).del();
+    await trx('poll_votes').insert({
+      poll_id: pollId,
+      option_label: optionLabel,
+      user_id: userId,
+    });
   });
-  tx();
 }
 
-export function votePollMulti(pollId: string, optionLabels: string[], userId: string) {
-  const tx = db.transaction(() => {
-    db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?').run(pollId, userId);
-    const insert = db.prepare(
-      'INSERT INTO poll_votes (poll_id, option_label, user_id) VALUES (?, ?, ?)',
-    );
+export async function votePollMulti(pollId: string, optionLabels: string[], userId: string) {
+  await db.transaction(async (trx) => {
+    await trx('poll_votes').where({ poll_id: pollId, user_id: userId }).del();
     for (const label of optionLabels) {
-      insert.run(pollId, label, userId);
+      await trx('poll_votes').insert({
+        poll_id: pollId,
+        option_label: label,
+        user_id: userId,
+      });
     }
   });
-  tx();
 }
 
-export function clearPollVotes(pollId: string, userId: string) {
-  db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?').run(pollId, userId);
+export async function clearPollVotes(pollId: string, userId: string) {
+  await db('poll_votes').where({ poll_id: pollId, user_id: userId }).del();
 }
 
-export function getOpenPollsByCreator(creatorId: string, channelId: string): Poll[] {
-  return db
-    .prepare('SELECT * FROM polls WHERE creator_id = ? AND channel_id = ? AND closed = 0')
-    .all(creatorId, channelId) as Poll[];
+export async function getOpenPollsByCreator(creatorId: string, channelId: string): Promise<Poll[]> {
+  return db<Poll>('polls').where({ creator_id: creatorId, channel_id: channelId, closed: 0 });
 }
 
-export function updatePoll(
+export async function updatePoll(
   pollId: string,
   updates: {
     title: string;
@@ -119,24 +111,24 @@ export function updatePoll(
     mentions: string;
     options: ParsedOption[];
   },
-): boolean {
+): Promise<boolean> {
   let votesCleared = false;
-  const tx = db.transaction(() => {
-    const currentPoll = getPoll(pollId);
+
+  await db.transaction(async (trx) => {
+    const currentPoll = await trx<Poll>('polls').where('id', pollId).first();
     if (!currentPoll) return;
 
-    db.prepare(
-      'UPDATE polls SET title = ?, mode = ?, anonymous = ?, show_live = ?, mentions = ? WHERE id = ?',
-    ).run(
-      updates.title,
-      updates.mode,
-      updates.anonymous,
-      updates.show_live,
-      updates.mentions,
-      pollId,
-    );
+    await trx('polls').where('id', pollId).update({
+      title: updates.title,
+      mode: updates.mode,
+      anonymous: updates.anonymous,
+      show_live: updates.show_live,
+      mentions: updates.mentions,
+    });
 
-    const currentOptions = getPollOptions(pollId);
+    const currentOptions = await trx<PollOption>('poll_options')
+      .where('poll_id', pollId)
+      .orderBy('idx');
     const oldLabels = new Set(currentOptions.map((o) => o.label));
     const newLabels = new Set(updates.options.map((o) => o.label));
     const optionsChanged =
@@ -145,55 +137,55 @@ export function updatePoll(
 
     // Single→multi is fine, but multi→single may leave users with multiple votes
     if (modeChanged && updates.mode === PollMode.Single) {
-      db.prepare('DELETE FROM poll_votes WHERE poll_id = ?').run(pollId);
+      await trx('poll_votes').where('poll_id', pollId).del();
       votesCleared = true;
     } else if (optionsChanged) {
       // Remove votes for options that no longer exist
       const removedLabels = [...oldLabels].filter((l) => !newLabels.has(l));
       if (removedLabels.length > 0) {
-        const placeholders = removedLabels.map(() => '?').join(', ');
-        const result = db
-          .prepare(`DELETE FROM poll_votes WHERE poll_id = ? AND option_label IN (${placeholders})`)
-          .run(pollId, ...removedLabels);
-        if (result.changes > 0) votesCleared = true;
+        const changes = await trx('poll_votes')
+          .where('poll_id', pollId)
+          .whereIn('option_label', removedLabels)
+          .del();
+        if (changes > 0) votesCleared = true;
       }
     }
 
     if (optionsChanged) {
-      db.prepare('DELETE FROM poll_options WHERE poll_id = ?').run(pollId);
-      const insertOption = db.prepare(
-        'INSERT INTO poll_options (poll_id, idx, label, target) VALUES (?, ?, ?, ?)',
-      );
+      await trx('poll_options').where('poll_id', pollId).del();
       for (let i = 0; i < updates.options.length; i++) {
-        insertOption.run(pollId, i, updates.options[i].label, updates.options[i].target);
+        await trx('poll_options').insert({
+          poll_id: pollId,
+          idx: i,
+          label: updates.options[i].label,
+          target: updates.options[i].target,
+        });
       }
     } else {
       // Labels unchanged — update targets in-place without clearing votes
-      const updateTarget = db.prepare(
-        'UPDATE poll_options SET target = ? WHERE poll_id = ? AND label = ?',
-      );
       for (const opt of updates.options) {
-        updateTarget.run(opt.target, pollId, opt.label);
+        await trx('poll_options')
+          .where({ poll_id: pollId, label: opt.label })
+          .update({ target: opt.target });
       }
     }
   });
-  tx();
+
   return votesCleared;
 }
 
-export function getPollVoteCounts(pollId: string): Map<string, number> {
-  const rows = db
-    .prepare(
-      'SELECT option_label, COUNT(*) as count FROM poll_votes WHERE poll_id = ? GROUP BY option_label',
-    )
-    .all(pollId) as { option_label: string; count: number }[];
+export async function getPollVoteCounts(pollId: string): Promise<Map<string, number>> {
+  const rows = await db('poll_votes')
+    .where('poll_id', pollId)
+    .groupBy('option_label')
+    .select('option_label', db.raw('COUNT(*) as count'));
   const map = new Map<string, number>();
   for (const row of rows) {
-    map.set(row.option_label, row.count);
+    map.set(row.option_label, Number(row.count));
   }
   return map;
 }
 
-export function closePoll(pollId: string) {
-  db.prepare('UPDATE polls SET closed = 1 WHERE id = ?').run(pollId);
+export async function closePoll(pollId: string) {
+  await db('polls').where('id', pollId).update({ closed: 1 });
 }

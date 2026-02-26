@@ -54,21 +54,26 @@ import { editChannelMessage } from '../util/messages.js';
 // ---------------------------------------------------------------------------
 
 /** Records a user's vote (single or multi mode) or clears if no labels selected. */
-function recordVote(poll: Poll, pollId: string, userId: string, selectedLabels: string[]): void {
+async function recordVote(
+  poll: Poll,
+  pollId: string,
+  userId: string,
+  selectedLabels: string[],
+): Promise<void> {
   if (selectedLabels.length === 0) {
-    clearPollVotes(pollId, userId);
+    await clearPollVotes(pollId, userId);
     return;
   }
   if (poll.mode === PollMode.Single) {
-    votePollSingle(pollId, selectedLabels[0], userId);
+    await votePollSingle(pollId, selectedLabels[0], userId);
   } else {
-    votePollMulti(pollId, selectedLabels, userId);
+    await votePollMulti(pollId, selectedLabels, userId);
   }
 }
 
 /** Builds the poll message payload (embed + components + content). */
-function buildPollPayload(poll: Poll, options: PollOption[], pollId: string) {
-  const votes = getPollVotes(pollId);
+async function buildPollPayload(poll: Poll, options: PollOption[], pollId: string) {
+  const votes = await getPollVotes(pollId);
   const embed = buildPollEmbed(poll, options, votes, !!poll.show_live);
   const components = buildPollComponents(pollId);
   return {
@@ -84,10 +89,10 @@ async function showVoteModal(
   poll: Poll,
   pollId: string,
 ): Promise<void> {
-  const options = getPollOptions(pollId);
-  const userVotes = getUserPollVotes(pollId, interaction.user.id);
+  const options = await getPollOptions(pollId);
+  const userVotes = await getUserPollVotes(pollId, interaction.user.id);
   const votedLabels = new Set(userVotes.map((v) => v.option_label));
-  const voteCounts = getPollVoteCounts(pollId);
+  const voteCounts = await getPollVoteCounts(pollId);
 
   // Filter: include option if no target, not full, or user already voted for it
   const availableOptions = options.filter((opt) => {
@@ -147,7 +152,7 @@ export async function handlePollVoteOpen(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { pollId } = parsed;
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   if (!poll || poll.closed) {
     await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
     return;
@@ -192,7 +197,7 @@ export async function handlePollVoteGo(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { pollId } = parsed;
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   if (!poll || poll.closed) {
     await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
     return;
@@ -208,20 +213,20 @@ export async function handlePollVoteGo(interaction: ButtonInteraction) {
 /** Handles the vote modal submission — records vote and refreshes the poll message. */
 export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteraction) {
   const pollId = interaction.customId.slice(POLL_VOTE_MODAL_PREFIX.length);
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   if (!poll || poll.closed) {
     await interaction.reply({ content: 'This poll is closed.', flags: MessageFlags.Ephemeral });
     return;
   }
 
   const rawComponents = getRawModalComponents(interaction);
-  const options = getPollOptions(pollId);
+  const options = await getPollOptions(pollId);
   const voteLabels = getCheckboxValues(rawComponents, MODAL_POLL_VOTE_CHOICE);
 
   // Server-side enforcement: reject new votes for filled options
   if (voteLabels.length > 0) {
-    const voteCounts = getPollVoteCounts(pollId);
-    const prevVotes = getUserPollVotes(pollId, interaction.user.id);
+    const voteCounts = await getPollVoteCounts(pollId);
+    const prevVotes = await getUserPollVotes(pollId, interaction.user.id);
     const prevLabels = new Set(prevVotes.map((v) => v.option_label));
 
     const blockedLabels: string[] = [];
@@ -244,7 +249,7 @@ export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteract
     }
   }
 
-  recordVote(poll, pollId, interaction.user.id, voteLabels);
+  await recordVote(poll, pollId, interaction.user.id, voteLabels);
 
   const message =
     voteLabels.length === 0
@@ -259,13 +264,13 @@ export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteract
       interaction,
       poll.channel_id,
       poll.message_id,
-      buildPollPayload(poll, options, pollId),
+      await buildPollPayload(poll, options, pollId),
     );
   } else {
     // Non-creator path: modal was opened from the poll message button —
     // deferUpdate + editReply updates the poll message directly
     await interaction.deferUpdate();
-    await interaction.editReply(buildPollPayload(poll, options, pollId));
+    await interaction.editReply(await buildPollPayload(poll, options, pollId));
 
     if (!poll.show_live) {
       await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });

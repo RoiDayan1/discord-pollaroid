@@ -11,7 +11,7 @@ export async function handleRankClose(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { rankId } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank) return;
 
   if (rank.closed) {
@@ -30,15 +30,15 @@ export async function handleRankClose(interaction: ButtonInteraction) {
     return;
   }
 
-  closeRank(rankId);
+  await closeRank(rankId);
 
   // Update the ephemeral to confirm closure
   await interaction.update({ content: 'Ranking closed!', components: [] });
 
   // Refresh the rank message with final results and no action buttons
-  const options = getRankOptions(rankId);
-  const votes = getRankVotes(rankId);
-  const updatedRank = getRank(rankId)!;
+  const options = await getRankOptions(rankId);
+  const votes = await getRankVotes(rankId);
+  const updatedRank = (await getRank(rankId))!;
   const embed = buildRankEmbed(updatedRank, options, votes, true);
 
   await editChannelMessage(interaction, updatedRank.channel_id, updatedRank.message_id, {

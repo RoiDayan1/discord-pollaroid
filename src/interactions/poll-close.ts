@@ -11,7 +11,7 @@ export async function handlePollClose(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { pollId } = parsed;
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   if (!poll) return;
 
   if (poll.closed) {
@@ -30,15 +30,15 @@ export async function handlePollClose(interaction: ButtonInteraction) {
     return;
   }
 
-  closePoll(pollId);
+  await closePoll(pollId);
 
   // Update the ephemeral to confirm closure
   await interaction.update({ content: 'Poll closed!', components: [] });
 
   // Refresh the poll message with final results and no action buttons
-  const options = getPollOptions(pollId);
-  const votes = getPollVotes(pollId);
-  const updatedPoll = getPoll(pollId)!;
+  const options = await getPollOptions(pollId);
+  const votes = await getPollVotes(pollId);
+  const updatedPoll = (await getPoll(pollId))!;
   const embed = buildPollEmbed(updatedPoll, options, votes, true);
 
   await editChannelMessage(interaction, updatedPoll.channel_id, updatedPoll.message_id, {

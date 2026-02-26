@@ -152,7 +152,7 @@ export async function handlePollModalSubmit(interaction: ModalSubmitInteraction)
 
   // Create poll in DB
   const pollId = generateId();
-  createPoll(
+  await createPoll(
     {
       id: pollId,
       guild_id: interaction.guildId!,
@@ -169,9 +169,9 @@ export async function handlePollModalSubmit(interaction: ModalSubmitInteraction)
   );
 
   // Send poll message and store its ID for later updates
-  const poll = getPoll(pollId)!;
-  const pollOptions = getPollOptions(pollId);
-  const votes = getPollVotes(pollId);
+  const poll = (await getPoll(pollId))!;
+  const pollOptions = await getPollOptions(pollId);
+  const votes = await getPollVotes(pollId);
   const embed = buildPollEmbed(poll, pollOptions, votes, showLive);
   const components = buildPollComponents(pollId);
 
@@ -182,5 +182,5 @@ export async function handlePollModalSubmit(interaction: ModalSubmitInteraction)
   });
 
   const message = await interaction.fetchReply();
-  setPollMessageId(pollId, message.id);
+  await setPollMessageId(pollId, message.id);
 }

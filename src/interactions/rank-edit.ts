@@ -40,7 +40,7 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { rankId } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
 
   if (!rank || rank.closed) {
     await interaction.reply({
@@ -57,7 +57,7 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
     return;
   }
 
-  const options = getRankOptions(rankId);
+  const options = await getRankOptions(rankId);
   const optionText = options.map((o) => o.label).join('\n');
   const currentMentions: string[] = JSON.parse(rank.mentions);
   const hasEveryone = currentMentions.includes(EVERYONE_SENTINEL);
@@ -162,7 +162,7 @@ export async function handleRankEditButton(interaction: ButtonInteraction) {
 /** Handles the edit modal submission — validates, updates DB, refreshes message. */
 export async function handleRankEditModalSubmit(interaction: ModalSubmitInteraction) {
   const rankId = interaction.customId.slice(RANK_EDIT_MODAL_PREFIX.length);
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
 
   if (!rank || rank.closed) {
     await interaction.reply({
@@ -200,7 +200,7 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
     return;
   }
 
-  const votesCleared = updateRank(rankId, {
+  const votesCleared = await updateRank(rankId, {
     title,
     mode,
     anonymous: anonymous ? 1 : 0,
@@ -217,9 +217,9 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
   await interaction.reply({ content, flags: MessageFlags.Ephemeral });
 
   // Refresh the rank message via channel editing
-  const updatedRank = getRank(rankId)!;
-  const updatedOptions = getRankOptions(rankId);
-  const votes = getRankVotes(rankId);
+  const updatedRank = (await getRank(rankId))!;
+  const updatedOptions = await getRankOptions(rankId);
+  const votes = await getRankVotes(rankId);
   const embed = buildRankEmbed(updatedRank, updatedOptions, votes, !!updatedRank.show_live);
   const components =
     updatedRank.mode === RankMode.Star

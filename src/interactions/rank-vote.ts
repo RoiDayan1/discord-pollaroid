@@ -92,8 +92,13 @@ function buildStarVoteModal(
 }
 
 /** Builds the rank message payload (embed + components + content). */
-function buildRankPayload(rank: Rank, options: RankOption[], rankId: string, isStar: boolean) {
-  const votes = getRankVotes(rankId);
+async function buildRankPayload(
+  rank: Rank,
+  options: RankOption[],
+  rankId: string,
+  isStar: boolean,
+) {
+  const votes = await getRankVotes(rankId);
   const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
   const components = isStar ? buildRankRateComponents(rankId) : buildRankOrderComponents(rankId);
   return {
@@ -113,7 +118,7 @@ export async function handleRankStarVoteOpen(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { rankId } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank || rank.closed) {
     await interaction.reply({ content: 'This ranking is closed.', flags: MessageFlags.Ephemeral });
     return;
@@ -145,8 +150,8 @@ export async function handleRankStarVoteOpen(interaction: ButtonInteraction) {
   }
 
   // Non-creator: open star vote modal directly
-  const options = getRankOptions(rankId);
-  const userVotes = getUserRankVotes(rankId, interaction.user.id);
+  const options = await getRankOptions(rankId);
+  const userVotes = await getUserRankVotes(rankId, interaction.user.id);
   const currentRatings = new Map(userVotes.map((v) => [v.option_idx, v.value]));
   await interaction.showModal(buildStarVoteModal(rankId, options, currentRatings));
 }
@@ -157,14 +162,14 @@ export async function handleRankRateGo(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { rankId } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank || rank.closed) {
     await interaction.reply({ content: 'This ranking is closed.', flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const options = getRankOptions(rankId);
-  const userVotes = getUserRankVotes(rankId, interaction.user.id);
+  const options = await getRankOptions(rankId);
+  const userVotes = await getUserRankVotes(rankId, interaction.user.id);
   const currentRatings = new Map(userVotes.map((v) => [v.option_idx, v.value]));
   await interaction.showModal(buildStarVoteModal(rankId, options, currentRatings));
 }
@@ -176,15 +181,15 @@ export async function handleRankRateGo(interaction: ButtonInteraction) {
 /** Records star ratings from the modal and refreshes the rank message. */
 export async function handleRankStarVoteSubmit(interaction: ModalSubmitInteraction) {
   const rankId = interaction.customId.slice(RANK_STAR_VOTE_MODAL_PREFIX.length);
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank || rank.closed) {
     await interaction.reply({ content: 'This ranking is closed.', flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const options = getRankOptions(rankId);
+  const options = await getRankOptions(rankId);
   const rawComponents = getRawModalComponents(interaction);
-  recordStarRatings(rank, options, rawComponents, interaction.user.id);
+  await recordStarRatings(rank, options, rawComponents, interaction.user.id);
 
   // Build confirmation summary
   const rated = options
@@ -201,13 +206,13 @@ export async function handleRankStarVoteSubmit(interaction: ModalSubmitInteracti
     // then refresh the rank message via channel editing
     await interaction.reply({ content: summary, flags: MessageFlags.Ephemeral });
     await editChannelMessage(interaction, rank.channel_id, rank.message_id, {
-      ...buildRankPayload(rank, options, rankId, true),
+      ...(await buildRankPayload(rank, options, rankId, true)),
     });
   } else {
     // Non-creator path: modal was opened from the rank message button —
     // deferUpdate + editReply updates the rank message directly
     await interaction.deferUpdate();
-    await interaction.editReply(buildRankPayload(rank, options, rankId, true));
+    await interaction.editReply(await buildRankPayload(rank, options, rankId, true));
 
     if (!rank.show_live) {
       await interaction.followUp({ content: summary, flags: MessageFlags.Ephemeral });
@@ -216,16 +221,16 @@ export async function handleRankStarVoteSubmit(interaction: ModalSubmitInteracti
 }
 
 /** Records star ratings from SelectMenu values. */
-function recordStarRatings(
+async function recordStarRatings(
   rank: Rank,
   options: RankOption[],
   rawComponents: ReturnType<typeof getRawModalComponents>,
   userId: string,
-): void {
+): Promise<void> {
   for (let i = 0; i < options.length; i++) {
     const val = getCheckboxValues(rawComponents, modalRankStarId(i))[0];
     if (val) {
-      voteRankStar(rank.id, options[i].idx, userId, parseInt(val, 10));
+      await voteRankStar(rank.id, options[i].idx, userId, parseInt(val, 10));
     }
   }
 }
@@ -240,13 +245,13 @@ export async function handleRankOrderStart(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { rankId } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank || rank.closed) {
     await interaction.reply({ content: 'This ranking is closed.', flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const options = getRankOptions(rankId);
+  const options = await getRankOptions(rankId);
 
   // Creator sees "Rank" + "Edit" + "Close" buttons; others go straight to the select menu flow
   if (interaction.user.id === rank.creator_id) {
@@ -293,13 +298,13 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
   if (!parsed) return;
 
   const { rankId, position, picks: previousPicks } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank || rank.closed) {
     await interaction.update({ content: 'This ranking is closed.', components: [] });
     return;
   }
 
-  const options = getRankOptions(rankId);
+  const options = await getRankOptions(rankId);
 
   // Record this pick — accumulate with previous picks from the customId
   const selectedIdx = parseInt(interaction.values[0], 10);
@@ -313,7 +318,7 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
     allPicks.push(remaining[0].idx);
 
     const finalPicks = allPicks.map((idx, i) => ({ optionIdx: idx, position: i + 1 }));
-    voteRankOrder(rankId, interaction.user.id, finalPicks);
+    await voteRankOrder(rankId, interaction.user.id, finalPicks);
 
     const summary = finalPicks
       .map((p) => {
@@ -329,7 +334,7 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
 
     // Refresh the rank message embed via channel editing
     await editChannelMessage(interaction, rank.channel_id, rank.message_id, {
-      ...buildRankPayload(rank, options, rankId, false),
+      ...(await buildRankPayload(rank, options, rankId, false)),
     });
     return;
   }
@@ -358,13 +363,13 @@ export async function handleRankOrderGo(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { rankId } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank || rank.closed) {
     await interaction.update({ content: 'This ranking is closed.', components: [] });
     return;
   }
 
-  const options = getRankOptions(rankId);
+  const options = await getRankOptions(rankId);
 
   const select = new StringSelectMenuBuilder()
     .setCustomId(rankOrderStepId(rankId, 1))
@@ -389,7 +394,7 @@ export async function handleRankOrderClose(interaction: ButtonInteraction) {
   if (!parsed) return;
 
   const { rankId } = parsed;
-  const rank = getRank(rankId);
+  const rank = await getRank(rankId);
   if (!rank) return;
 
   if (rank.closed) {
@@ -405,14 +410,14 @@ export async function handleRankOrderClose(interaction: ButtonInteraction) {
     return;
   }
 
-  closeRank(rankId);
+  await closeRank(rankId);
 
   await interaction.update({ content: 'Ranking closed!', components: [] });
 
   // Refresh the rank message embed via channel editing
-  const options = getRankOptions(rankId);
-  const votes = getRankVotes(rankId);
-  const updatedRank = getRank(rankId)!;
+  const options = await getRankOptions(rankId);
+  const votes = await getRankVotes(rankId);
+  const updatedRank = (await getRank(rankId))!;
   const embed = buildRankEmbed(updatedRank, options, votes, true);
 
   await editChannelMessage(interaction, updatedRank.channel_id, updatedRank.message_id, {

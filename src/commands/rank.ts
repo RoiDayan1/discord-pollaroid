@@ -149,7 +149,7 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
 
   // Create rank in DB
   const rankId = generateId();
-  createRank(
+  await createRank(
     {
       id: rankId,
       guild_id: interaction.guildId!,
@@ -166,9 +166,9 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
   );
 
   // Send rank message and store its ID
-  const rank = getRank(rankId)!;
-  const rankOptions = getRankOptions(rankId);
-  const votes = getRankVotes(rankId);
+  const rank = (await getRank(rankId))!;
+  const rankOptions = await getRankOptions(rankId);
+  const votes = await getRankVotes(rankId);
   const embed = buildRankEmbed(rank, rankOptions, votes, showLive);
   const components =
     mode === RankMode.Star ? buildRankRateComponents(rankId) : buildRankOrderComponents(rankId);
@@ -179,5 +179,5 @@ export async function handleRankModalSubmit(interaction: ModalSubmitInteraction)
     components,
   });
   const message = await interaction.fetchReply();
-  setRankMessageId(rankId, message.id);
+  await setRankMessageId(rankId, message.id);
 }

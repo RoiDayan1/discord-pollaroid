@@ -31,86 +31,81 @@ export interface RankVote {
   voted_at: string;
 }
 
-export function createRank(rank: Omit<Rank, 'message_id' | 'created_at'>, options: string[]) {
-  const insertRank = db.prepare(`
-    INSERT INTO ranks (id, guild_id, channel_id, creator_id, title, mode, anonymous, show_live, mentions, closed)
-    VALUES (@id, @guild_id, @channel_id, @creator_id, @title, @mode, @anonymous, @show_live, @mentions, @closed)
-  `);
-  const insertOption = db.prepare(`
-    INSERT INTO rank_options (rank_id, idx, label) VALUES (?, ?, ?)
-  `);
-
-  const tx = db.transaction(() => {
-    insertRank.run(rank);
+export async function createRank(rank: Omit<Rank, 'message_id' | 'created_at'>, options: string[]) {
+  await db.transaction(async (trx) => {
+    await trx('ranks').insert(rank);
     for (let i = 0; i < options.length; i++) {
-      insertOption.run(rank.id, i, options[i]);
+      await trx('rank_options').insert({
+        rank_id: rank.id,
+        idx: i,
+        label: options[i],
+      });
     }
   });
-  tx();
 }
 
-export function setRankMessageId(rankId: string, messageId: string) {
-  db.prepare('UPDATE ranks SET message_id = ? WHERE id = ?').run(messageId, rankId);
+export async function setRankMessageId(rankId: string, messageId: string) {
+  await db('ranks').where('id', rankId).update({ message_id: messageId });
 }
 
-export function getRank(rankId: string): Rank | undefined {
-  return db.prepare('SELECT * FROM ranks WHERE id = ?').get(rankId) as Rank | undefined;
+export async function getRank(rankId: string): Promise<Rank | undefined> {
+  return db<Rank>('ranks').where('id', rankId).first();
 }
 
-export function getRankOptions(rankId: string): RankOption[] {
-  return db
-    .prepare('SELECT * FROM rank_options WHERE rank_id = ? ORDER BY idx')
-    .all(rankId) as RankOption[];
+export async function getRankOptions(rankId: string): Promise<RankOption[]> {
+  return db<RankOption>('rank_options').where('rank_id', rankId).orderBy('idx');
 }
 
-export function getRankVotes(rankId: string): RankVote[] {
-  return db.prepare('SELECT * FROM rank_votes WHERE rank_id = ?').all(rankId) as RankVote[];
+export async function getRankVotes(rankId: string): Promise<RankVote[]> {
+  return db<RankVote>('rank_votes').where('rank_id', rankId);
 }
 
-export function getUserRankVotes(rankId: string, userId: string): RankVote[] {
-  return db
-    .prepare('SELECT * FROM rank_votes WHERE rank_id = ? AND user_id = ?')
-    .all(rankId, userId) as RankVote[];
+export async function getUserRankVotes(rankId: string, userId: string): Promise<RankVote[]> {
+  return db<RankVote>('rank_votes').where({ rank_id: rankId, user_id: userId });
 }
 
-export function voteRankStar(rankId: string, optionIdx: number, userId: string, stars: number) {
-  const tx = db.transaction(() => {
-    db.prepare('DELETE FROM rank_votes WHERE rank_id = ? AND option_idx = ? AND user_id = ?').run(
-      rankId,
-      optionIdx,
-      userId,
-    );
-    db.prepare(
-      'INSERT INTO rank_votes (rank_id, option_idx, user_id, value) VALUES (?, ?, ?, ?)',
-    ).run(rankId, optionIdx, userId, stars);
+export async function voteRankStar(
+  rankId: string,
+  optionIdx: number,
+  userId: string,
+  stars: number,
+) {
+  await db.transaction(async (trx) => {
+    await trx('rank_votes')
+      .where({ rank_id: rankId, option_idx: optionIdx, user_id: userId })
+      .del();
+    await trx('rank_votes').insert({
+      rank_id: rankId,
+      option_idx: optionIdx,
+      user_id: userId,
+      value: stars,
+    });
   });
-  tx();
 }
 
-export function voteRankOrder(
+export async function voteRankOrder(
   rankId: string,
   userId: string,
   ordering: { optionIdx: number; position: number }[],
 ) {
-  const tx = db.transaction(() => {
-    db.prepare('DELETE FROM rank_votes WHERE rank_id = ? AND user_id = ?').run(rankId, userId);
-    const insert = db.prepare(
-      'INSERT INTO rank_votes (rank_id, option_idx, user_id, value) VALUES (?, ?, ?, ?)',
-    );
+  await db.transaction(async (trx) => {
+    await trx('rank_votes').where({ rank_id: rankId, user_id: userId }).del();
     for (const { optionIdx, position } of ordering) {
-      insert.run(rankId, optionIdx, userId, position);
+      await trx('rank_votes').insert({
+        rank_id: rankId,
+        option_idx: optionIdx,
+        user_id: userId,
+        value: position,
+      });
     }
   });
-  tx();
 }
 
-export function getOpenRanksByCreator(creatorId: string, channelId: string): Rank[] {
-  return db
-    .prepare('SELECT * FROM ranks WHERE creator_id = ? AND channel_id = ? AND closed = 0')
-    .all(creatorId, channelId) as Rank[];
+export async function getOpenRanksByCreator(creatorId: string, channelId: string): Promise<Rank[]> {
+  return db<Rank>('ranks').where({ creator_id: creatorId, channel_id: channelId, closed: 0 });
 }
 
-export function updateRank(
+export async function updateRank(
   rankId: string,
   updates: {
     title: string;
@@ -120,24 +115,24 @@ export function updateRank(
     mentions: string;
     options: string[];
   },
-): boolean {
+): Promise<boolean> {
   let votesCleared = false;
-  const tx = db.transaction(() => {
-    const currentRank = getRank(rankId);
+
+  await db.transaction(async (trx) => {
+    const currentRank = await trx<Rank>('ranks').where('id', rankId).first();
     if (!currentRank) return;
 
-    db.prepare(
-      'UPDATE ranks SET title = ?, mode = ?, anonymous = ?, show_live = ?, mentions = ? WHERE id = ?',
-    ).run(
-      updates.title,
-      updates.mode,
-      updates.anonymous,
-      updates.show_live,
-      updates.mentions,
-      rankId,
-    );
+    await trx('ranks').where('id', rankId).update({
+      title: updates.title,
+      mode: updates.mode,
+      anonymous: updates.anonymous,
+      show_live: updates.show_live,
+      mentions: updates.mentions,
+    });
 
-    const currentOptions = getRankOptions(rankId);
+    const currentOptions = await trx<RankOption>('rank_options')
+      .where('rank_id', rankId)
+      .orderBy('idx');
     const oldLabels = currentOptions.map((o) => o.label);
     const newLabels = updates.options;
     const optionsChanged =
@@ -147,24 +142,25 @@ export function updateRank(
     // Rank votes are keyed by option_idx, so any option change invalidates indices.
     // Order mode rankings depend on the full set. Mode changes make votes semantically invalid.
     if (modeChanged || optionsChanged) {
-      const result = db.prepare('DELETE FROM rank_votes WHERE rank_id = ?').run(rankId);
-      if (result.changes > 0) votesCleared = true;
+      const changes = await trx('rank_votes').where('rank_id', rankId).del();
+      if (changes > 0) votesCleared = true;
     }
 
     if (optionsChanged) {
-      db.prepare('DELETE FROM rank_options WHERE rank_id = ?').run(rankId);
-      const insertOption = db.prepare(
-        'INSERT INTO rank_options (rank_id, idx, label) VALUES (?, ?, ?)',
-      );
+      await trx('rank_options').where('rank_id', rankId).del();
       for (let i = 0; i < updates.options.length; i++) {
-        insertOption.run(rankId, i, updates.options[i]);
+        await trx('rank_options').insert({
+          rank_id: rankId,
+          idx: i,
+          label: updates.options[i],
+        });
       }
     }
   });
-  tx();
+
   return votesCleared;
 }
 
-export function closeRank(rankId: string) {
-  db.prepare('UPDATE ranks SET closed = 1 WHERE id = ?').run(rankId);
+export async function closeRank(rankId: string) {
+  await db('ranks').where('id', rankId).update({ closed: 1 });
 }

@@ -1,11 +1,35 @@
-import Database, { type Database as DatabaseType } from 'better-sqlite3';
+import Knex from 'knex';
+import { config } from '../config.js';
 import { initSchema } from './schema.js';
 
-const db: DatabaseType = new Database('pollaroid.db');
+const isPostgres = !!config.databaseUrl;
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = Knex(
+  isPostgres
+    ? {
+        client: 'pg',
+        connection: config.databaseUrl,
+      }
+    : {
+        client: 'better-sqlite3',
+        connection: { filename: 'pollaroid.db' },
+        useNullAsDefault: true,
+        pool: {
+          afterCreate: (
+            conn: { pragma: (s: string) => void },
+            done: (err: Error | null, conn: unknown) => void,
+          ) => {
+            conn.pragma('journal_mode = WAL');
+            conn.pragma('foreign_keys = ON');
+            done(null, conn);
+          },
+        },
+      },
+);
 
-initSchema(db);
+export async function initDb() {
+  await initSchema(db);
+}
 
+export { isPostgres };
 export default db;
