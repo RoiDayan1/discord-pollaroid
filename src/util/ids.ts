@@ -78,7 +78,7 @@ export const RANK_STAR_RE = new RegExp(
   `^${RANK}${ID_SEP}(${ID_PATTERN})${ID_SEP}${STAR}${ID_SEP}(${NUM_PATTERN})${ID_SEP}(${NUM_PATTERN})$`,
 );
 export const RANK_ORDER_STEP_RE = new RegExp(
-  `^${RANK}${ID_SEP}(${ID_PATTERN})${ID_SEP}${ORDER_STEP}${ID_SEP}(${NUM_PATTERN})$`,
+  `^${RANK}${ID_SEP}(${ID_PATTERN})${ID_SEP}${ORDER_STEP}${ID_SEP}(${NUM_PATTERN})(?:${ID_SEP}(${NUM_PATTERN}(?:,${NUM_PATTERN})*))?$`,
 );
 
 // ---------------------------------------------------------------------------
@@ -157,8 +157,10 @@ export function rankOrderStartId(rankId: string): string {
   return `${RANK}${ID_SEP}${rankId}${ID_SEP}${ORDER_START}`;
 }
 
-export function rankOrderStepId(rankId: string, position: number): string {
-  return `${RANK}${ID_SEP}${rankId}${ID_SEP}${ORDER_STEP}${ID_SEP}${position}`;
+export function rankOrderStepId(rankId: string, position: number, picks?: number[]): string {
+  const base = `${RANK}${ID_SEP}${rankId}${ID_SEP}${ORDER_STEP}${ID_SEP}${position}`;
+  if (picks && picks.length > 0) return `${base}${ID_SEP}${picks.join(',')}`;
+  return base;
 }
 
 export function rankOrderGoId(rankId: string): string {
@@ -211,10 +213,13 @@ export function parseRankOrderStart(customId: string): { rankId: string } | null
   return { rankId: match[1] };
 }
 
-export function parseRankOrderStep(customId: string): { rankId: string; position: number } | null {
+export function parseRankOrderStep(
+  customId: string,
+): { rankId: string; position: number; picks: number[] } | null {
   const match = customId.match(RANK_ORDER_STEP_RE);
   if (!match) return null;
-  return { rankId: match[1], position: parseInt(match[2], 10) };
+  const picks = match[3] ? match[3].split(',').map(Number) : [];
+  return { rankId: match[1], position: parseInt(match[2], 10), picks };
 }
 
 export function parseRankOrderGo(customId: string): { rankId: string } | null {

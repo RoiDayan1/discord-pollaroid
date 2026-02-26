@@ -2,25 +2,25 @@
  * Bot entry point — sets up the Discord client and routes all interactions.
  */
 
-import { Client, GatewayIntentBits, Events } from 'discord.js';
-import { config } from './config.js';
+import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { commands } from './commands/index.js';
-import { routeInteraction } from './interactions/index.js';
 import { handlePollModalSubmit } from './commands/poll.js';
-import { handlePollVoteModalSubmit } from './interactions/poll-vote.js';
-import { handlePollEditModalSubmit } from './interactions/poll-edit.js';
 import { handleRankModalSubmit } from './commands/rank.js';
-import { handleRankStarVoteSubmit } from './interactions/rank-vote.js';
+import { config } from './config.js';
+import { routeInteraction } from './interactions/index.js';
+import { handlePollEditModalSubmit } from './interactions/poll-edit.js';
+import { handlePollVoteModalSubmit } from './interactions/poll-vote.js';
 import { handleRankEditModalSubmit } from './interactions/rank-edit.js';
+import { handleRankStarVoteSubmit } from './interactions/rank-vote.js';
+import { safeErrorReply } from './util/errors.js';
 import {
+  POLL_EDIT_MODAL_PREFIX,
   POLL_MODAL_ID,
   POLL_VOTE_MODAL_PREFIX,
-  POLL_EDIT_MODAL_PREFIX,
+  RANK_EDIT_MODAL_PREFIX,
   RANK_MODAL_ID,
   RANK_STAR_VOTE_MODAL_PREFIX,
-  RANK_EDIT_MODAL_PREFIX,
 } from './util/ids.js';
-import { safeErrorReply } from './util/errors.js';
 
 // Importing connection initializes the DB and runs schema
 import './db/connection.js';
@@ -39,8 +39,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     try {
       await command.execute(interaction);
-    } catch (err) {
-      console.error(`Error executing /${interaction.commandName}:`, err);
+    } catch (error) {
+      console.error(`Error executing /${interaction.commandName}:`, error);
       await safeErrorReply(interaction);
     }
   }
@@ -61,8 +61,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       } else if (interaction.customId.startsWith(RANK_EDIT_MODAL_PREFIX)) {
         await handleRankEditModalSubmit(interaction);
       }
-    } catch (err) {
-      console.error(`Error handling modal ${interaction.customId}:`, err);
+    } catch (error) {
+      console.error(`Error handling modal ${interaction.customId}:`, error);
       await safeErrorReply(interaction);
     }
   }

@@ -51,6 +51,7 @@ src/
     components.ts       # ActionRow/button builders for poll/rank messages
     constants.ts        # Enums (PollMode, RankMode, Setting), EVERYONE_SENTINEL, colors, star display, target icons
     modal.ts            # Modal data extraction (getRawModalComponents, getCheckboxValues)
+    messages.ts         # editChannelMessage() — edits bot messages via channel REST API
     errors.ts           # safeErrorReply helper
     validation.ts       # parseOptions, parseOptionsWithTargets, validatePollOptions, validateRankOptions
 ```
@@ -123,32 +124,46 @@ src/
 - Server-side enforcement rejects new votes for filled options (race condition protection)
 - Editing targets without changing labels preserves existing votes
 
+### Message Editing (`util/messages.ts`)
+- `editChannelMessage(interaction, channelId, messageId, payload)` edits bot messages via channel REST API
+- Uses `interaction.client.rest.patch(Routes.channelMessage(...))` — requires bot VIEW_CHANNEL + SEND_MESSAGES permissions
+- Converts discord.js builder objects (embeds, components) to raw API format via `.toJSON()`
+- Converts `allowedMentions` to snake_case `allowed_mentions` for the REST payload
+- On 50001 (Missing Access): sends an ephemeral error via `safeErrorReply` asking the user to grant View Channel (or add the bot role to private channels)
+- Silently catches other errors (message/channel deleted or unreachable)
+- Used by all interaction handlers to refresh poll/rank messages after votes, edits, and closes
+
 ### Poll Voting Flow
 - **Non-creator**: Vote button opens a modal with CheckboxGroup directly
-- **Creator**: Vote button → `deferUpdate` + ephemeral with Vote/Edit/Close buttons → chosen action
+- **Creator**: Vote button → ephemeral with Vote/Edit/Close buttons → chosen action
   - Vote: opens the same CheckboxGroup modal
   - Edit: opens pre-filled edit modal (title, options, mode, settings); `updatePoll()` clears votes if options/mode changed
   - Close: closes the poll
 - Previous votes are pre-selected via `default: true` on CheckboxGroup options
-- Creator sessions stored in module-scope Map (`pollId:userId` → interaction reference)
-- Live results update uses `interaction.deferUpdate()` + `interaction.editReply()` (interaction webhook, no channel permissions needed)
+- Creator detection via `interaction.user.id === poll.creator_id`
+- Creator path: `interaction.reply({ ephemeral })` for confirmation + `editChannelMessage()` to refresh the poll message
+- Non-creator path: `deferUpdate()` + `editReply()` updates the poll message directly (modal was opened from the message button)
 - Non-live polls reply with ephemeral confirmation message
 
 ### Rank Star Voting Flow
 - **Non-creator**: Rate button opens a modal with one StringSelect per option (1-5 stars) directly
-- **Creator**: Rate button → `deferUpdate` + ephemeral with Rate/Edit/Close buttons → chosen action
+- **Creator**: Rate button → ephemeral with Rate/Edit/Close buttons → chosen action
   - Rate: opens the same StringSelect modal
   - Edit: opens pre-filled edit modal (title, options, mode, settings); `updateRank()` clears ALL votes if options/mode changed
   - Close: closes the ranking
 - Previous ratings are pre-selected via `default: true` on StringSelect options
-- Creator sessions stored in `rankCreatorSessions` Map (`rankId:userId` → interaction reference)
+- Creator detection via `interaction.user.id === rank.creator_id`
+- Creator path: `interaction.reply({ ephemeral })` for confirmation + `editChannelMessage()` to refresh the rank message
+- Non-creator path: `deferUpdate()` + `editReply()` updates the rank message directly
 
 ### Rank Ordering Flow
 - Step-by-step ephemeral flow using StringSelectMenu
-- Session map (`orderingSessions`) stores picks as user progresses (`rankId:userId` → interaction + picks)
+- Accumulated picks encoded in select menu customId (stateless — no server-side session storage)
+  - Format: `rank:<id>:order-step:<position>[:<pick1>,<pick2>,...]`
+  - `parseRankOrderStep()` returns `{ rankId, position, picks: number[] }`
 - Creator gets ephemeral with Rank/Edit/Close buttons; non-creator goes straight to step 1
 - Last option auto-assigned when only one remains
-- Results update via stored `rankInteraction.editReply()` on the original message
+- Rank message refreshed via `editChannelMessage()` using `channel_id` + `message_id` from DB
 
 ## Key Constraints
 
@@ -186,4 +201,5 @@ GUILD_ID=...
 - Using modal components: https://docs.discord.com/developers/components/using-modal-components
 - Using message components: https://docs.discord.com/developers/components/using-message-components
 - Getting started: https://docs.discord.com/developers/intro
+- Opcodes and status codes: https://docs.discord.com/developers/topics/opcodes-and-status-codes
 - Full docs index (for LLMs): https://docs.discord.com/llms.txt

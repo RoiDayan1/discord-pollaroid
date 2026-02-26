@@ -7,8 +7,9 @@
  * 1. Creator clicks Rate/Submit → ephemeral with Rate|Rank / Edit / Close buttons
  * 2. Rate/Rank opens the vote modal/flow, Edit opens edit modal, Close closes rank
  *
- * The creator session stores the original button interaction so the rank
- * message can be refreshed after actions taken from the ephemeral.
+ * The rank message is refreshed via channel-based editing using the
+ * message_id stored in the database. Ordering picks are encoded in
+ * the select menu customId (stateless — no server-side session storage).
  */
 
 import {
@@ -53,20 +54,7 @@ import {
 import { buildMessageContent, buildRankEmbed } from '../util/embeds.js';
 import { buildRankRateComponents, buildRankOrderComponents } from '../util/components.js';
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
-
-// ---------------------------------------------------------------------------
-// Creator session map (star mode)
-// ---------------------------------------------------------------------------
-
-/** In-memory creator sessions for star mode — keyed by "rankId:userId". */
-export const rankCreatorSessions = new Map<
-  string,
-  {
-    rankId: string;
-    /** The original button interaction on the rank message, used to refresh the embed. */
-    rankInteraction: ButtonInteraction;
-  }
->();
+import { editChannelMessage } from '../util/messages.js';
 
 // ---------------------------------------------------------------------------
 // Star rating — helpers
@@ -103,6 +91,18 @@ function buildStarVoteModal(
   };
 }
 
+/** Builds the rank message payload (embed + components + content). */
+function buildRankPayload(rank: Rank, options: RankOption[], rankId: string, isStar: boolean) {
+  const votes = getRankVotes(rankId);
+  const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
+  const components = isStar ? buildRankRateComponents(rankId) : buildRankOrderComponents(rankId);
+  return {
+    ...buildMessageContent(rank.title, rank.mentions),
+    embeds: [embed],
+    components,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Star rating — modal open
 // ---------------------------------------------------------------------------
@@ -121,10 +121,6 @@ export async function handleRankStarVoteOpen(interaction: ButtonInteraction) {
 
   // Creator: show ephemeral with Rate / Edit / Close buttons
   if (interaction.user.id === rank.creator_id) {
-    await interaction.deferUpdate();
-    const key = sessionKey(rankId, interaction.user.id);
-    rankCreatorSessions.set(key, { rankId, rankInteraction: interaction });
-
     const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(rankRateGoId(rankId))
@@ -140,7 +136,7 @@ export async function handleRankStarVoteOpen(interaction: ButtonInteraction) {
         .setStyle(ButtonStyle.Danger),
     );
 
-    await interaction.followUp({
+    await interaction.reply({
       content: 'What would you like to do?',
       components: [row],
       flags: MessageFlags.Ephemeral,
@@ -200,29 +196,18 @@ export async function handleRankStarVoteSubmit(interaction: ModalSubmitInteracti
   const summary =
     rated.length > 0 ? `Ratings recorded!\n${rated.join('\n')}` : 'No ratings submitted.';
 
-  // Check for creator session (modal was opened from the ephemeral)
-  const key = sessionKey(rankId, interaction.user.id);
-  const session = rankCreatorSessions.get(key);
-
-  if (session?.rankInteraction) {
-    // Creator path: refresh rank message via stored interaction
-    const votes = getRankVotes(rankId);
-    const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
-    const components = buildRankRateComponents(rankId);
-    try {
-      await session.rankInteraction.editReply({
-        ...buildMessageContent(rank.title, rank.mentions),
-        embeds: [embed],
-        components,
-      });
-    } catch {
-      // Token may have expired — embed will refresh on next interaction
-    }
-
+  if (interaction.user.id === rank.creator_id) {
+    // Creator path: modal was opened from ephemeral — reply with confirmation,
+    // then refresh the rank message via channel editing
     await interaction.reply({ content: summary, flags: MessageFlags.Ephemeral });
+    await editChannelMessage(interaction, rank.channel_id, rank.message_id, {
+      ...buildRankPayload(rank, options, rankId, true),
+    });
   } else {
-    // Non-creator path: refresh via deferUpdate + editReply
-    await refreshRankMessage(interaction, rank, options, rankId);
+    // Non-creator path: modal was opened from the rank message button —
+    // deferUpdate + editReply updates the rank message directly
+    await interaction.deferUpdate();
+    await interaction.editReply(buildRankPayload(rank, options, rankId, true));
 
     if (!rank.show_live) {
       await interaction.followUp({ content: summary, flags: MessageFlags.Ephemeral });
@@ -245,42 +230,9 @@ function recordStarRatings(
   }
 }
 
-/** Rebuilds the rank embed and updates the rank message in-place. */
-async function refreshRankMessage(
-  interaction: ModalSubmitInteraction,
-  rank: Rank,
-  options: RankOption[],
-  rankId: string,
-): Promise<void> {
-  const votes = getRankVotes(rankId);
-  const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
-  const components = buildRankRateComponents(rankId);
-  await interaction.deferUpdate();
-  await interaction.editReply({
-    ...buildMessageContent(rank.title, rank.mentions),
-    embeds: [embed],
-    components,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Ordering flow
 // ---------------------------------------------------------------------------
-
-/** In-memory ordering sessions — keyed by "rankId:userId". */
-const orderingSessions = new Map<
-  string,
-  {
-    rankId: string;
-    picks: { optionIdx: number; position: number }[];
-    /** The original button interaction on the rank message, used to refresh the embed. */
-    rankInteraction?: ButtonInteraction;
-  }
->();
-
-function sessionKey(rankId: string, userId: string): string {
-  return `${rankId}:${userId}`;
-}
 
 /** Starts the ordering flow — shows the first step select menu (or creator choice). */
 export async function handleRankOrderStart(interaction: ButtonInteraction) {
@@ -295,13 +247,6 @@ export async function handleRankOrderStart(interaction: ButtonInteraction) {
   }
 
   const options = getRankOptions(rankId);
-  const key = sessionKey(rankId, interaction.user.id);
-
-  // Defer the button on the rank message so we can editReply later to refresh the embed
-  await interaction.deferUpdate();
-
-  // Store the interaction so we can refresh the rank message after the flow completes
-  orderingSessions.set(key, { rankId, picks: [], rankInteraction: interaction });
 
   // Creator sees "Rank" + "Edit" + "Close" buttons; others go straight to the select menu flow
   if (interaction.user.id === rank.creator_id) {
@@ -320,7 +265,7 @@ export async function handleRankOrderStart(interaction: ButtonInteraction) {
         .setStyle(ButtonStyle.Danger),
     );
 
-    await interaction.followUp({
+    await interaction.reply({
       content: 'What would you like to do?',
       components: [row],
       flags: MessageFlags.Ephemeral,
@@ -335,7 +280,7 @@ export async function handleRankOrderStart(interaction: ButtonInteraction) {
 
   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select);
 
-  await interaction.followUp({
+  await interaction.reply({
     content: `**Rank the options from best to worst** (step 1/${options.length})`,
     components: [row],
     flags: MessageFlags.Ephemeral,
@@ -347,7 +292,7 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
   const parsed = parseRankOrderStep(interaction.customId);
   if (!parsed) return;
 
-  const { rankId, position } = parsed;
+  const { rankId, position, picks: previousPicks } = parsed;
   const rank = getRank(rankId);
   if (!rank || rank.closed) {
     await interaction.update({ content: 'This ranking is closed.', components: [] });
@@ -355,29 +300,22 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
   }
 
   const options = getRankOptions(rankId);
-  const key = sessionKey(rankId, interaction.user.id);
 
-  // Get or create session (reset picks if starting from position 1, keep rankInteraction)
-  let session = orderingSessions.get(key);
-  if (!session || position === 1) {
-    session = { rankId, picks: [], rankInteraction: session?.rankInteraction };
-    orderingSessions.set(key, session);
-  }
-
-  // Record this pick
+  // Record this pick — accumulate with previous picks from the customId
   const selectedIdx = parseInt(interaction.values[0], 10);
-  session.picks.push({ optionIdx: selectedIdx, position });
+  const allPicks = [...previousPicks, selectedIdx];
 
   const nextPosition = position + 1;
-  const remaining = options.filter((opt) => !session!.picks.some((p) => p.optionIdx === opt.idx));
+  const remaining = options.filter((opt) => !allPicks.includes(opt.idx));
 
   // Auto-assign the last remaining option and save
   if (remaining.length === 1) {
-    session.picks.push({ optionIdx: remaining[0].idx, position: nextPosition });
-    voteRankOrder(rankId, interaction.user.id, session.picks);
+    allPicks.push(remaining[0].idx);
 
-    const summary = session.picks
-      .sort((a, b) => a.position - b.position)
+    const finalPicks = allPicks.map((idx, i) => ({ optionIdx: idx, position: i + 1 }));
+    voteRankOrder(rankId, interaction.user.id, finalPicks);
+
+    const summary = finalPicks
       .map((p) => {
         const label = options.find((o) => o.idx === p.optionIdx)?.label;
         return `**${p.position}.** ${label}`;
@@ -389,29 +327,16 @@ export async function handleRankOrderStep(interaction: StringSelectMenuInteracti
       components: [],
     });
 
-    // Refresh the rank message embed via the stored button interaction
-    if (session.rankInteraction) {
-      try {
-        const votes = getRankVotes(rankId);
-        const embed = buildRankEmbed(rank, options, votes, !!rank.show_live);
-        const components = buildRankOrderComponents(rankId);
-        await session.rankInteraction.editReply({
-          ...buildMessageContent(rank.title, rank.mentions),
-          embeds: [embed],
-          components,
-        });
-      } catch {
-        // Token may have expired — embed will refresh on next interaction
-      }
-    }
-
-    orderingSessions.delete(key);
+    // Refresh the rank message embed via channel editing
+    await editChannelMessage(interaction, rank.channel_id, rank.message_id, {
+      ...buildRankPayload(rank, options, rankId, false),
+    });
     return;
   }
 
-  // Show next step
+  // Show next step — encode accumulated picks in the customId
   const select = new StringSelectMenuBuilder()
-    .setCustomId(rankOrderStepId(rankId, nextPosition))
+    .setCustomId(rankOrderStepId(rankId, nextPosition, allPicks))
     .setPlaceholder(`Select your #${nextPosition} choice`)
     .addOptions(remaining.map((opt) => ({ label: opt.label, value: String(opt.idx) })));
 
@@ -440,11 +365,6 @@ export async function handleRankOrderGo(interaction: ButtonInteraction) {
   }
 
   const options = getRankOptions(rankId);
-  const key = sessionKey(rankId, interaction.user.id);
-
-  // Reset picks but keep the stored rankInteraction
-  const session = orderingSessions.get(key);
-  if (session) session.picks = [];
 
   const select = new StringSelectMenuBuilder()
     .setCustomId(rankOrderStepId(rankId, 1))
@@ -489,24 +409,15 @@ export async function handleRankOrderClose(interaction: ButtonInteraction) {
 
   await interaction.update({ content: 'Ranking closed!', components: [] });
 
-  // Refresh the rank message embed via the stored button interaction
-  const key = sessionKey(rankId, interaction.user.id);
-  const session = orderingSessions.get(key);
-  if (session?.rankInteraction) {
-    try {
-      const options = getRankOptions(rankId);
-      const votes = getRankVotes(rankId);
-      const updatedRank = getRank(rankId)!;
-      const embed = buildRankEmbed(updatedRank, options, votes, true);
-      await session.rankInteraction.editReply({
-        ...buildMessageContent(updatedRank.title, updatedRank.mentions),
-        embeds: [embed],
-        components: [],
-      });
-    } catch {
-      // Token may have expired — embed will refresh on next interaction
-    }
-  }
+  // Refresh the rank message embed via channel editing
+  const options = getRankOptions(rankId);
+  const votes = getRankVotes(rankId);
+  const updatedRank = getRank(rankId)!;
+  const embed = buildRankEmbed(updatedRank, options, votes, true);
 
-  orderingSessions.delete(key);
+  await editChannelMessage(interaction, updatedRank.channel_id, updatedRank.message_id, {
+    ...buildMessageContent(updatedRank.title, updatedRank.mentions),
+    embeds: [embed],
+    components: [],
+  });
 }

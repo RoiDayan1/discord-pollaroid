@@ -4,7 +4,7 @@ import { type ButtonInteraction, MessageFlags } from 'discord.js';
 import { parsePollClose } from '../util/ids.js';
 import { getPoll, getPollOptions, getPollVotes, closePoll } from '../db/polls.js';
 import { buildMessageContent, buildPollEmbed } from '../util/embeds.js';
-import { pollCreatorSessions } from './poll-vote.js';
+import { editChannelMessage } from '../util/messages.js';
 
 export async function handlePollClose(interaction: ButtonInteraction) {
   const parsed = parsePollClose(interaction.customId);
@@ -32,38 +32,18 @@ export async function handlePollClose(interaction: ButtonInteraction) {
 
   closePoll(pollId);
 
-  // Show final results with no action buttons
+  // Update the ephemeral to confirm closure
+  await interaction.update({ content: 'Poll closed!', components: [] });
+
+  // Refresh the poll message with final results and no action buttons
   const options = getPollOptions(pollId);
   const votes = getPollVotes(pollId);
   const updatedPoll = getPoll(pollId)!;
   const embed = buildPollEmbed(updatedPoll, options, votes, true);
 
-  // Check for creator session — refresh poll message via stored interaction
-  const key = `${pollId}:${interaction.user.id}`;
-  const session = pollCreatorSessions.get(key);
-
-  if (session?.pollInteraction) {
-    // Update the ephemeral message to confirm closure
-    await interaction.update({ content: 'Poll closed!', components: [] });
-
-    // Refresh the poll message via the stored interaction
-    try {
-      await session.pollInteraction.editReply({
-        ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
-        embeds: [embed],
-        components: [],
-      });
-    } catch {
-      // Token may have expired — embed will refresh on next interaction
-    }
-
-    pollCreatorSessions.delete(key);
-  } else {
-    // Fallback: update the message the button is on
-    await interaction.update({
-      ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
-      embeds: [embed],
-      components: [],
-    });
-  }
+  await editChannelMessage(interaction, updatedPoll.channel_id, updatedPoll.message_id, {
+    ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
+    embeds: [embed],
+    components: [],
+  });
 }

@@ -8,8 +8,8 @@
  * Non-creator flow:
  * 1. User clicks "Vote" → vote modal opens directly
  *
- * The creator session stores the original button interaction so the poll
- * message can be refreshed after actions taken from the ephemeral.
+ * The poll message is refreshed via channel-based editing using the
+ * message_id stored in the database.
  */
 
 import {
@@ -47,24 +47,7 @@ import {
   MODAL_POLL_VOTE_CHOICE,
 } from '../util/ids.js';
 import { getRawModalComponents, getCheckboxValues } from '../util/modal.js';
-
-// ---------------------------------------------------------------------------
-// Creator session map
-// ---------------------------------------------------------------------------
-
-/** In-memory creator sessions — keyed by "pollId:userId". */
-export const pollCreatorSessions = new Map<
-  string,
-  {
-    pollId: string;
-    /** The original button interaction on the poll message, used to refresh the embed. */
-    pollInteraction: ButtonInteraction;
-  }
->();
-
-function sessionKey(pollId: string, userId: string): string {
-  return `${pollId}:${userId}`;
-}
+import { editChannelMessage } from '../util/messages.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,22 +66,16 @@ function recordVote(poll: Poll, pollId: string, userId: string, selectedLabels: 
   }
 }
 
-/** Rebuilds the poll embed and updates the poll message in-place. */
-async function refreshPollMessage(
-  interaction: ModalSubmitInteraction,
-  poll: Poll,
-  options: PollOption[],
-  pollId: string,
-): Promise<void> {
+/** Builds the poll message payload (embed + components + content). */
+function buildPollPayload(poll: Poll, options: PollOption[], pollId: string) {
   const votes = getPollVotes(pollId);
   const embed = buildPollEmbed(poll, options, votes, !!poll.show_live);
   const components = buildPollComponents(pollId);
-  await interaction.deferUpdate();
-  await interaction.editReply({
+  return {
     ...buildMessageContent(poll.title, poll.mentions),
     embeds: [embed],
     components,
-  });
+  };
 }
 
 /** Opens the vote modal (without creator options). */
@@ -176,12 +153,8 @@ export async function handlePollVoteOpen(interaction: ButtonInteraction) {
     return;
   }
 
-  // Creator: show ephemeral with Vote / Edit / Close buttons
+  // Creator: ephemeral with Vote / Edit / Close buttons
   if (interaction.user.id === poll.creator_id) {
-    await interaction.deferUpdate();
-    const key = sessionKey(pollId, interaction.user.id);
-    pollCreatorSessions.set(key, { pollId, pollInteraction: interaction });
-
     const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(pollVoteGoId(pollId))
@@ -197,7 +170,7 @@ export async function handlePollVoteOpen(interaction: ButtonInteraction) {
         .setStyle(ButtonStyle.Danger),
     );
 
-    await interaction.followUp({
+    await interaction.reply({
       content: 'What would you like to do?',
       components: [row],
       flags: MessageFlags.Ephemeral,
@@ -273,39 +246,28 @@ export async function handlePollVoteModalSubmit(interaction: ModalSubmitInteract
 
   recordVote(poll, pollId, interaction.user.id, voteLabels);
 
-  // Check if we have a creator session (modal opened from the ephemeral)
-  const key = sessionKey(pollId, interaction.user.id);
-  const session = pollCreatorSessions.get(key);
+  const message =
+    voteLabels.length === 0
+      ? 'Your vote has been cleared.'
+      : `Vote recorded for **${voteLabels.join(', ')}**!`;
 
-  if (session?.pollInteraction) {
-    // Refresh the poll message via the stored interaction
-    const votes = getPollVotes(pollId);
-    const embed = buildPollEmbed(poll, options, votes, !!poll.show_live);
-    const components = buildPollComponents(pollId);
-    try {
-      await session.pollInteraction.editReply({
-        ...buildMessageContent(poll.title, poll.mentions),
-        embeds: [embed],
-        components,
-      });
-    } catch {
-      // Token may have expired — embed will refresh on next interaction
-    }
-
-    const message =
-      voteLabels.length === 0
-        ? 'Your vote has been cleared.'
-        : `Vote recorded for **${voteLabels.join(', ')}**!`;
+  if (interaction.user.id === poll.creator_id) {
+    // Creator path: modal was opened from ephemeral — reply with confirmation,
+    // then refresh the poll message via channel editing
     await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
+    await editChannelMessage(
+      interaction,
+      poll.channel_id,
+      poll.message_id,
+      buildPollPayload(poll, options, pollId),
+    );
   } else {
-    // Non-creator path — refresh via deferUpdate + editReply
-    await refreshPollMessage(interaction, poll, options, pollId);
+    // Non-creator path: modal was opened from the poll message button —
+    // deferUpdate + editReply updates the poll message directly
+    await interaction.deferUpdate();
+    await interaction.editReply(buildPollPayload(poll, options, pollId));
 
     if (!poll.show_live) {
-      const message =
-        voteLabels.length === 0
-          ? 'Your vote has been cleared.'
-          : `Vote recorded for **${voteLabels.join(', ')}**!`;
       await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });
     }
   }

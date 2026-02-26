@@ -3,6 +3,9 @@
  *
  * Flow: Creator clicks Rate/Submit → ephemeral with Edit button →
  * pre-filled edit modal → submit → DB updated, message refreshed.
+ *
+ * The rank message is refreshed via channel-based editing using the
+ * message_id stored in the database.
  */
 
 import {
@@ -29,7 +32,7 @@ import {
 } from '../util/ids.js';
 import { getCheckboxValues, getRawModalComponents, getRoleSelectValues } from '../util/modal.js';
 import { parseOptions, validateRankOptions } from '../util/validation.js';
-import { rankCreatorSessions } from './rank-vote.js';
+import { editChannelMessage } from '../util/messages.js';
 
 /** Handles the "Edit Ranking" button click — shows a pre-filled edit modal. */
 export async function handleRankEditButton(interaction: ButtonInteraction) {
@@ -213,28 +216,19 @@ export async function handleRankEditModalSubmit(interaction: ModalSubmitInteract
 
   await interaction.reply({ content, flags: MessageFlags.Ephemeral });
 
-  // Refresh the rank message via the stored creator session
-  const key = `${rankId}:${interaction.user.id}`;
-  const session = rankCreatorSessions.get(key);
-  const storedInteraction = session?.rankInteraction;
+  // Refresh the rank message via channel editing
+  const updatedRank = getRank(rankId)!;
+  const updatedOptions = getRankOptions(rankId);
+  const votes = getRankVotes(rankId);
+  const embed = buildRankEmbed(updatedRank, updatedOptions, votes, !!updatedRank.show_live);
+  const components =
+    updatedRank.mode === RankMode.Star
+      ? buildRankRateComponents(rankId)
+      : buildRankOrderComponents(rankId);
 
-  if (storedInteraction) {
-    try {
-      const updatedRank = getRank(rankId)!;
-      const updatedOptions = getRankOptions(rankId);
-      const votes = getRankVotes(rankId);
-      const embed = buildRankEmbed(updatedRank, updatedOptions, votes, !!updatedRank.show_live);
-      const components =
-        updatedRank.mode === RankMode.Star
-          ? buildRankRateComponents(rankId)
-          : buildRankOrderComponents(rankId);
-      await storedInteraction.editReply({
-        ...buildMessageContent(updatedRank.title, updatedRank.mentions),
-        embeds: [embed],
-        components,
-      });
-    } catch {
-      // Token may have expired — embed will refresh on next interaction
-    }
-  }
+  await editChannelMessage(interaction, updatedRank.channel_id, updatedRank.message_id, {
+    ...buildMessageContent(updatedRank.title, updatedRank.mentions),
+    embeds: [embed],
+    components,
+  });
 }

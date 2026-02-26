@@ -4,8 +4,8 @@
  * Flow: Vote modal → creator selects "Edit" → ephemeral "Open Edit Modal"
  * button → creator clicks → edit modal (pre-filled) → submit → DB updated.
  *
- * The poll message auto-refreshes on the next vote interaction because all
- * vote paths rebuild the embed from current DB state.
+ * The poll message is refreshed via channel-based editing using the
+ * message_id stored in the database.
  */
 
 import {
@@ -30,9 +30,9 @@ import {
   parsePollEditOpen,
   POLL_EDIT_MODAL_PREFIX,
 } from '../util/ids.js';
+import { editChannelMessage } from '../util/messages.js';
 import { getCheckboxValues, getRawModalComponents, getRoleSelectValues } from '../util/modal.js';
 import { parseOptionsWithTargets, validatePollOptions } from '../util/validation.js';
-import { pollCreatorSessions } from './poll-vote.js';
 
 /** Handles the "Open Edit Modal" button click — shows a pre-filled edit modal. */
 export async function handlePollEditButton(interaction: ButtonInteraction) {
@@ -209,31 +209,23 @@ export async function handlePollEditModalSubmit(interaction: ModalSubmitInteract
     options,
   });
 
-  // Refresh the poll message via the creator session
-  const key = `${pollId}:${interaction.user.id}`;
-  const session = pollCreatorSessions.get(key);
-
-  if (session?.pollInteraction) {
-    const updatedPoll = getPoll(pollId)!;
-    const updatedOptions = getPollOptions(pollId);
-    const votes = getPollVotes(pollId);
-    const embed = buildPollEmbed(updatedPoll, updatedOptions, votes, !!updatedPoll.show_live);
-    const components = buildPollComponents(pollId);
-    try {
-      await session.pollInteraction.editReply({
-        ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
-        embeds: [embed],
-        components,
-      });
-    } catch {
-      // Token may have expired — embed will refresh on next interaction
-    }
-  }
-
   let content = 'Poll updated!';
   if (votesCleared) {
     content += ' Some votes were cleared due to removed options or voting mode change.';
   }
 
   await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+
+  // Refresh the poll message via channel editing
+  const updatedPoll = getPoll(pollId)!;
+  const updatedOptions = getPollOptions(pollId);
+  const votes = getPollVotes(pollId);
+  const embed = buildPollEmbed(updatedPoll, updatedOptions, votes, !!updatedPoll.show_live);
+  const components = buildPollComponents(pollId);
+
+  await editChannelMessage(interaction, updatedPoll.channel_id, updatedPoll.message_id, {
+    ...buildMessageContent(updatedPoll.title, updatedPoll.mentions),
+    embeds: [embed],
+    components,
+  });
 }
