@@ -62,7 +62,7 @@ cp .env.example .env
 # Edit .env and fill in your values:
 #   BOT_TOKEN      — your bot token from the Developer Portal
 #   CLIENT_ID      — your application's Client ID (from General Information)
-#   GUILD_ID       — your Discord server ID (right-click server → Copy Server ID)
+#   GUILD_ID       — (optional) your Discord server ID for instant command updates during dev
 #   DATABASE_URL   — (optional) PostgreSQL connection string; omit for local SQLite
 
 # Register slash commands with Discord

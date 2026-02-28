@@ -23,7 +23,7 @@ yarn format            # Auto-fix formatting
 ```
 src/
   index.ts              # Entry point, event routing
-  config.ts             # Env config (BOT_TOKEN, CLIENT_ID, GUILD_ID, DATABASE_URL)
+  config.ts             # Env config (BOT_TOKEN, CLIENT_ID, GUILD_ID (optional), DATABASE_URL)
   deploy-commands.ts    # One-shot script to register slash commands
 
   commands/             # Slash command definitions + execute handlers
@@ -195,7 +195,7 @@ Requires `.env` file (see `.env.example`):
 ```
 BOT_TOKEN=...
 CLIENT_ID=...
-GUILD_ID=...
+# GUILD_ID=...                  (optional — for instant command updates during dev)
 # DATABASE_URL=postgres://...  (optional — omit for local SQLite)
 ```
 
