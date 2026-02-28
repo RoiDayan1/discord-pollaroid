@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "yarn && tsc",
+    "start": "yarn deploy-commands && node dist/index.js",
     "deploy-commands": "tsx src/deploy-commands.ts",
     "lint": "eslint src/",
     "format:check": "prettier --check src/",
