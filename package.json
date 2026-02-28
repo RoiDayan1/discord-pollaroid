@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "yarn && tsc",
+    "build": "tsc",
     "start": "yarn deploy-commands && node dist/index.js",
     "deploy-commands": "tsx src/deploy-commands.ts",
     "lint": "eslint src/",
