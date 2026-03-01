@@ -7,6 +7,8 @@ Discord bot for polls and rankings. TypeScript, discord.js v14, Knex.js (SQLite 
 When planning changes that add, remove, or change functionality, include a final step to update this CLAUDE.md file to reflect those changes. Skip this for small fixes that don't affect documented behavior or structure.
 Also update the README.md file if relevant.
 
+All code changes must be backed by tests. When adding new features, fixing bugs, or modifying existing behavior, write or update corresponding tests in `tests/`. Run `yarn test` to verify before considering the work done. Never skip testing — untested code is incomplete code.
+
 ## Quick Reference
 
 ```bash
@@ -14,13 +16,17 @@ yarn dev               # Start bot with hot reload
 yarn build             # Compile TypeScript to dist/
 yarn start             # Run compiled JS
 yarn deploy-commands   # Register slash commands with Discord
-yarn validate          # Run typecheck + lint + format check
+yarn test              # Run tests once
+yarn test:watch        # Run tests in watch mode
+yarn test:coverage     # Run tests with coverage report
+yarn validate          # Run typecheck + lint + format check + tests
 yarn format            # Auto-fix formatting
 ```
 
 ## Project Structure
 
 ```
+tests/                    # Vitest test suite (see Testing section below)
 src/
   index.ts              # Entry point, event routing
   config.ts             # Env config (BOT_TOKEN, CLIENT_ID, GUILD_ID (optional), DATABASE_URL)
@@ -207,6 +213,52 @@ CLIENT_ID=...
 # GUILD_ID=...                  (optional — for instant command updates during dev)
 # DATABASE_URL=postgres://...  (optional — omit for local SQLite)
 ```
+
+## Testing
+
+### Framework & Config
+- **Vitest** with globals enabled (`describe`, `it`, `expect`, `vi` available without imports)
+- Config: `vitest.config.ts` — includes `tests/**/*.test.ts`, sets test env vars
+- All test files live in `tests/` (not in `src/`) mirroring the source structure
+
+### Test Directory Structure
+```
+tests/
+  helpers/
+    db-setup.ts           # In-memory SQLite Knex factory + schema init + table cleanup
+    discord-mocks.ts      # Mock factories: createMockButtonInteraction, createMockModalSubmitInteraction,
+                          #   createMockSelectMenuInteraction, createMockCommandInteraction
+                          # Modal component fixtures: labelWrapped, roleSelectWrapped
+  util/                   # Pure utility function tests
+  db/                     # Database integration tests (real in-memory SQLite)
+  interactions/           # Interaction handler tests (real DB + mocked Discord API)
+  commands/               # Command handler tests (real DB + mocked Discord API)
+```
+
+### Testing Patterns
+
+**DB tests** — mock `src/db/connection.js` to use an in-memory SQLite instance:
+```ts
+let testDb: KnexType;
+vi.mock('../../src/db/connection.js', async () => {
+  const { setupTestDb } = await import('../helpers/db-setup.js');
+  testDb = await setupTestDb();
+  return { default: testDb, isPostgres: false, initDb: vi.fn() };
+});
+// Import modules under test AFTER mock setup (top-level await)
+const { createPoll, getPoll } = await import('../../src/db/polls.js');
+```
+
+**Interaction handler tests** — combine DB mock with Discord interaction mocks:
+```ts
+// Same DB mock as above, plus:
+import { createMockButtonInteraction } from '../helpers/discord-mocks.js';
+const interaction = createMockButtonInteraction({ customId: '...', user: { id: 'user1' } });
+await handleSomething(interaction as never);
+expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({ ... }));
+```
+
+**Table cleanup** — use `cleanAllTables(testDb)` in `beforeEach` to reset state between tests.
 
 ## Code Style
 

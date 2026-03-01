@@ -12,7 +12,10 @@
     "format:check": "prettier --check src/",
     "format": "prettier --write src/",
     "typecheck": "tsc --noEmit",
-    "validate": "yarn typecheck && yarn lint && yarn format:check"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "validate": "yarn typecheck && yarn lint && yarn format:check && yarn test"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
@@ -31,6 +34,7 @@
     "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.0"
+    "typescript-eslint": "^8.56.0",
+    "vitest": "^4.0.18"
   }
 }

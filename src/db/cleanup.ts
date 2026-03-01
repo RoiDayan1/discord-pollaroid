@@ -1,7 +1,11 @@
 import db from './connection.js';
 
 function ago(days: number) {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  // Use YYYY-MM-DD HH:MM:SS format to match SQLite's CURRENT_TIMESTAMP for correct string comparisons
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .replace('T', ' ')
+    .slice(0, 19);
 }
 
 /** Delete all child rows (votes + options) then the parent rows for the given IDs. */
