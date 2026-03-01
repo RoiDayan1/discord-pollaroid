@@ -43,6 +43,7 @@ src/
   db/                   # Knex.js — SQLite (local) or PostgreSQL (production), all async
     connection.ts       # Knex instance factory + initDb() (WAL mode, foreign keys ON for SQLite)
     schema.ts           # Knex schema builder (idempotent) + legacy migrations
+    cleanup.ts          # Periodic purge of closed/orphaned/stale polls and ranks
     polls.ts            # Poll CRUD + vote operations (all async)
     ranks.ts            # Rank CRUD + vote operations (all async)
 
@@ -91,6 +92,14 @@ src/
 - `poll_votes` keyed by `option_label` (not option_idx); `rank_votes` keyed by `option_idx`
 - `mentions` column (JSON array of role ID strings, default `'[]'`) on both polls and ranks — used for optional role pings in message content
 - Startup migrations handle schema evolution (e.g., adding `show_live` to ranks, poll_votes option_label migration, `mentions` to polls/ranks, `target` to poll_options)
+
+### Database Cleanup (`db/cleanup.ts`)
+- `runCleanup()` purges stale data on startup (fire-and-forget) and every 24 hours via `setInterval`
+- Deletes in FK-safe order: votes → options → parent rows, each category in a transaction
+- Three categories:
+  - **Closed** polls/ranks older than 7 days (results already baked into Discord embed)
+  - **Orphaned** creations (`message_id IS NULL`, open, older than 1 hour) — failed creation attempts
+  - **Stale open** polls/ranks older than 90 days — abandoned
 
 ### Modal Components (New Discord API)
 - Label (type 18), CheckboxGroup (type 22), Checkbox (type 23), StringSelect (type 3), RoleSelect (type 6)

@@ -22,9 +22,12 @@ import {
   RANK_STAR_VOTE_MODAL_PREFIX,
 } from './util/ids.js';
 
+import { runCleanup } from './db/cleanup.js';
 import { initDb } from './db/connection.js';
 
 await initDb();
+runCleanup().catch((err) => console.error('[cleanup] Failed:', err));
+setInterval(() => runCleanup().catch((err) => console.error('[cleanup] Failed:', err)), 86_400_000);
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
